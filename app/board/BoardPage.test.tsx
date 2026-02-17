@@ -24,6 +24,21 @@ jest.mock("@/lib/firebase/client", () => ({
   app: null,
 }));
 
+jest.mock("react-konva", () => {
+  const React = require("react");
+  return {
+    Stage: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("div", { "data-testid": "konva-stage" }, children),
+    Layer: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    Group: ({ children }: { children?: React.ReactNode }) =>
+      React.createElement("div", null, children),
+    Rect: () => React.createElement("div", null),
+    Line: () => React.createElement("div", null),
+    Text: () => React.createElement("div", null),
+  };
+});
+
 function MockAuthProvider({
   value,
   children,
@@ -80,5 +95,25 @@ describe("BoardPage", () => {
     expect(screen.getByText("ColabBoard")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sign out/ })).toBeInTheDocument();
     expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it("renders canvas with pan/zoom when authenticated", () => {
+    const mockUser = { uid: "user-1", email: "test@example.com" } as any;
+    render(
+      <MockAuthProvider
+        value={{
+          user: mockUser,
+          loading: false,
+          signInWithGoogle: jest.fn(),
+          signInWithEmail: jest.fn(),
+          signUpWithEmail: jest.fn(),
+          signOut: jest.fn(),
+        }}
+      >
+        <BoardPageContent />
+      </MockAuthProvider>
+    );
+
+    expect(screen.getByTestId("board-canvas")).toBeInTheDocument();
   });
 });

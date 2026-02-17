@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
+import { BoardCanvas } from "@/components/board/BoardCanvas";
 
 export function BoardPageContent() {
   const router = useRouter();
@@ -29,7 +30,14 @@ export function BoardPageContent() {
   const displayName = user.displayName || user.email || "You";
 
   return (
-    <>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100vh",
+        minHeight: 0,
+      }}
+    >
       <header className="board_header">
         <span className="board_header_logo">ColabBoard</span>
         <span className="board_header_title">Board</span>
@@ -41,11 +49,19 @@ export function BoardPageContent() {
           Sign out
         </button>
       </header>
-      <main style={{ padding: "var(--space-3)" }}>
-        <p style={{ color: "var(--color-text-muted)", fontSize: "0.9375rem" }}>
-          Board "{DEFAULT_BOARD_ID}" — canvas and tools will go here (Phase 2).
-        </p>
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          padding: 0,
+        }}
+      >
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <BoardCanvas />
+        </div>
       </main>
-    </>
+    </div>
   );
 }
