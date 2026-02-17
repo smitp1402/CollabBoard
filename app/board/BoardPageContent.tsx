@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { ref, remove } from "firebase/database";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { BoardCanvas } from "@/components/board/BoardCanvas";
 import { useBoardObjects } from "@/lib/board/useBoardObjects";
 import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
+import { getRealtimeDb } from "@/lib/firebase/client";
 import type { PresenceUser } from "@/lib/board/usePresence";
 
 function getInitial(name: string): string {
@@ -47,6 +49,12 @@ export function BoardPageContent() {
   if (!user) return null;
 
   const handleSignOut = async () => {
+    const db = getRealtimeDb();
+    if (db && user) {
+      const presenceRef = ref(db, `presence/${DEFAULT_BOARD_ID}/${user.uid}`);
+      const cursorRef = ref(db, `cursors/${DEFAULT_BOARD_ID}/${user.uid}`);
+      await Promise.all([remove(presenceRef), remove(cursorRef)]).catch(() => {});
+    }
     await signOut();
     router.push("/");
   };

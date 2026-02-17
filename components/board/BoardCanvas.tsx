@@ -18,6 +18,7 @@ const DEFAULT_RECT_COLOR = "#e0e7ff";
 const CANVAS_BG_FILL = "#f8fafc";
 const SELECTION_STROKE = "#2563eb";
 const SELECTION_STROKE_WIDTH = 2;
+const TAP_PLACE_DEDUPE_MS = 500;
 
 function updateObjectPosition(
   objects: BoardObject[],
@@ -63,6 +64,15 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const didPanRef = useRef(false);
+  const lastPinchRef = useRef<{ distance: number; centerX: number; centerY: number } | null>(null);
+  const scaleRef = useRef(scale);
+  const positionRef = useRef(position);
+  const lastPlaceTimeRef = useRef(0);
+
+  useEffect(() => {
+    scaleRef.current = scale;
+    positionRef.current = position;
+  }, [scale, position]);
 
   const { otherUsers, error: presenceError } = usePresence(boardId ?? "", user ?? null, cursorWorld);
 
@@ -96,13 +106,70 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       didPanRef.current = true;
     };
     const onMouseUp = () => setIsPanning(false);
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 1) {
+        const t = e.touches[0];
+        const dx = t.clientX - panStartRef.current.x;
+        const dy = t.clientY - panStartRef.current.y;
+        setPosition((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+        panStartRef.current = { x: t.clientX, y: t.clientY };
+        didPanRef.current = true;
+        e.preventDefault();
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 0) setIsPanning(false);
+    };
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
     };
   }, [isPanning]);
+
+  useEffect(() => {
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !lastPinchRef.current) return;
+      e.preventDefault();
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const distance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      const centerX = (t0.clientX + t1.clientX) / 2;
+      const centerY = (t0.clientY + t1.clientY) / 2;
+      const prev = lastPinchRef.current;
+      const scaleBy = distance / prev.distance;
+      const currentScale = scaleRef.current;
+      const currentPos = positionRef.current;
+      const newScale = Math.min(Math.max(0.2, currentScale * scaleBy), 5);
+      const pointToX = (centerX - currentPos.x) / currentScale;
+      const pointToY = (centerY - currentPos.y) / currentScale;
+      const newPos = {
+        x: centerX - pointToX * newScale,
+        y: centerY - pointToY * newScale,
+      };
+      scaleRef.current = newScale;
+      positionRef.current = newPos;
+      setScale(newScale);
+      setPosition(newPos);
+      lastPinchRef.current = { distance, centerX, centerY };
+    };
+    const onTouchEnd = () => {
+      if (lastPinchRef.current) lastPinchRef.current = null;
+    };
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("touchcancel", onTouchEnd);
+    return () => {
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, []);
 
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
@@ -208,19 +275,42 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     setEditingStickyId(null);
   };
 
+  const getPointerFromEvent = useCallback(
+    (e: KonvaEventObject<MouseEvent | TouchEvent>, stage: ReturnType<KonvaNode["getStage"]>) => {
+      if (!stage || !containerRef.current) return null;
+      const ev = e.evt;
+      if ("touches" in ev && ev.changedTouches?.length) {
+        const t = ev.changedTouches[0];
+        const rect = containerRef.current.getBoundingClientRect();
+        return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+      }
+      return stage.getPointerPosition();
+    },
+    []
+  );
+
+  const tryPlaceAtPointer = useCallback(
+    (pointer: { x: number; y: number }) => {
+      if (Date.now() - lastPlaceTimeRef.current < TAP_PLACE_DEDUPE_MS) return;
+      if (activeTool !== "sticky" && activeTool !== "rectangle") return;
+      if (didPanRef.current) return;
+      lastPlaceTimeRef.current = Date.now();
+      const worldX = (pointer.x - position.x) / scale;
+      const worldY = (pointer.y - position.y) / scale;
+      if (activeTool === "sticky") placeSticky(worldX, worldY);
+      else placeRectangle(worldX, worldY);
+    },
+    [activeTool, position, scale, placeSticky, placeRectangle]
+  );
+
   const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
     const stage = e.target.getStage();
     if (!stage) return;
     const clickedOnEmpty = e.target === stage || e.target.name() === "stage-bg";
     if (clickedOnEmpty) {
-      if ((activeTool === "sticky" || activeTool === "rectangle") && !didPanRef.current) {
-        const pointer = stage.getPointerPosition();
-        if (pointer) {
-          const worldX = (pointer.x - position.x) / scale;
-          const worldY = (pointer.y - position.y) / scale;
-          if (activeTool === "sticky") placeSticky(worldX, worldY);
-          else placeRectangle(worldX, worldY);
-        }
+      const pointer = getPointerFromEvent(e as KonvaEventObject<MouseEvent | TouchEvent>, stage);
+      if (pointer && (activeTool === "sticky" || activeTool === "rectangle") && !didPanRef.current) {
+        tryPlaceAtPointer(pointer);
         return;
       }
       setSelectedId(null);
@@ -238,6 +328,16 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     setSelectedId(null);
   };
 
+  const handleStageTap = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const clickedOnEmpty = e.target === stage || e.target.name() === "stage-bg";
+    if (clickedOnEmpty) {
+      const pointer = getPointerFromEvent(e, stage);
+      if (pointer) tryPlaceAtPointer(pointer);
+    }
+  };
+
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
     const target = e.target;
     const clickedOnEmpty = target === target.getStage() || target.name() === "stage-bg";
@@ -245,6 +345,32 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       didPanRef.current = false;
       panStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
       setIsPanning(true);
+    }
+  };
+
+  const handleStageTouchStart = (e: KonvaEventObject<TouchEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const ev = e.evt;
+    if (ev.touches.length === 2) {
+      const t0 = ev.touches[0];
+      const t1 = ev.touches[1];
+      lastPinchRef.current = {
+        distance: Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY),
+        centerX: (t0.clientX + t1.clientX) / 2,
+        centerY: (t0.clientY + t1.clientY) / 2,
+      };
+      ev.preventDefault();
+      return;
+    }
+    if (ev.touches.length === 1) {
+      const target = e.target;
+      const clickedOnEmpty = target === stage || target.name() === "stage-bg";
+      if (clickedOnEmpty) {
+        didPanRef.current = false;
+        panStartRef.current = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+        setIsPanning(true);
+      }
     }
   };
 
@@ -286,8 +412,10 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
           onMouseLeave={handleStageMouseLeave}
+          onTouchStart={handleStageTouchStart}
           onWheel={handleWheel}
           onClick={handleStageClick}
+          onTap={handleStageTap}
         >
         <Layer>
           <Rect

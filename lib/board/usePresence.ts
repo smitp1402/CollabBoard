@@ -65,6 +65,9 @@ export function usePresence(
     onDisconnect(presenceRef).remove().catch((e) =>
       setError(e instanceof Error ? e : new Error(String(e)))
     );
+    onDisconnect(cursorRef).remove().catch((e) =>
+      setError(e instanceof Error ? e : new Error(String(e)))
+    );
 
     const presenceRootRef = ref(db, `presence/${boardId}`);
     const cursorsRootRef = ref(db, `cursors/${boardId}`);
