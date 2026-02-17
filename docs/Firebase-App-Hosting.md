@@ -1,6 +1,6 @@
 # Host ColabBoard on Firebase App Hosting
 
-Follow these steps to deploy ColabBoard using **Firebase App Hosting** (Option A). No repo code changes are required; configuration is done in the Firebase Console.
+Follow these steps to deploy ColabBoard using **Firebase App Hosting** (Option A). Environment variables are set in **`apphosting.yaml`** in the repo; the rest is configured in the Firebase Console.
 
 ---
 
@@ -50,9 +50,13 @@ Save or proceed.
 
 ## Step 4: Environment variables
 
-In the App Hosting backend configuration, add these **environment variables** (same names and values as in your `.env.local`). Get the values from Firebase Console → Project settings → Your apps, and from Realtime Database → URL.
+App Hosting reads environment variables from **`apphosting.yaml`** in your repo root (not from the Console).
 
-| Name | Where to get it |
+1. **Open `apphosting.yaml`** in the project root. It already lists the 7 required variables with placeholders.
+2. **Replace every placeholder** with your real values. Copy them from Firebase Console → Project settings → Your apps, and from Realtime Database → URL. Or copy from your local **`.env.local`** (same variable names).
+3. **Save the file** and commit/push to your branch. The next App Hosting build will use these values.
+
+| Variable | Where to get it |
 |------|------------------|
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | Project settings → Your apps → Web app config |
 | `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | Same (e.g. `your-project.firebaseapp.com`) |
@@ -62,7 +66,7 @@ In the App Hosting backend configuration, add these **environment variables** (s
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | Same |
 | `NEXT_PUBLIC_FIREBASE_DATABASE_URL` | Realtime Database → Create database / use existing → copy URL |
 
-Add every variable from the table. Without them, the app will show “Firestore not configured” or similar errors.
+Without these, the app will show “Firestore not configured” or similar errors.
 
 ---
 
