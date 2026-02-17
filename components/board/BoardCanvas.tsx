@@ -1,10 +1,12 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback, useMemo } from "react";
-import { Stage, Layer, Rect, Line, Group, Text } from "react-konva";
+import { Stage, Layer, Rect, Line, Group, Text, Circle } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
+import type { User } from "firebase/auth";
 import type { BoardObject } from "@/lib/board-types";
 import { isSticky, isRectangle } from "@/lib/board-types";
+import { usePresence, type PresenceUser } from "@/lib/board/usePresence";
 
 const GRID_SPACING = 48;
 const GRID_STROKE = "#e2e8f0";
@@ -37,11 +39,15 @@ function updateObjectText(
 }
 
 type BoardCanvasProps = {
+  boardId?: string;
+  user?: User | null;
   objects?: BoardObject[];
   onObjectsChange?: (objects: BoardObject[]) => void;
+  onOtherUsersChange?: (users: PresenceUser[]) => void;
+  onPresenceError?: (err: Error | null) => void;
 };
 
-export function BoardCanvas({ objects: propsObjects, onObjectsChange }: BoardCanvasProps) {
+export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsChange, onOtherUsersChange, onPresenceError }: BoardCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [localObjects, setLocalObjects] = useState<BoardObject[]>([]);
   const objects = propsObjects ?? localObjects;
@@ -50,12 +56,23 @@ export function BoardCanvas({ objects: propsObjects, onObjectsChange }: BoardCan
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
   const [editingStickyId, setEditingStickyId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<"sticky" | "rectangle" | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const didPanRef = useRef(false);
+
+  const { otherUsers, error: presenceError } = usePresence(boardId ?? "", user ?? null, cursorWorld);
+
+  useEffect(() => {
+    onOtherUsersChange?.(otherUsers);
+  }, [otherUsers, onOtherUsersChange]);
+
+  useEffect(() => {
+    onPresenceError?.(presenceError ?? null);
+  }, [presenceError, onPresenceError]);
 
   const updateSize = useCallback(() => {
     if (!containerRef.current) return;
@@ -231,6 +248,20 @@ export function BoardCanvas({ objects: propsObjects, onObjectsChange }: BoardCan
     }
   };
 
+  const handleStageMouseMove = (e: KonvaEventObject<MouseEvent>) => {
+    const stage = e.target.getStage();
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    const worldX = (pointer.x - position.x) / scale;
+    const worldY = (pointer.y - position.y) / scale;
+    setCursorWorld({ x: worldX, y: worldY });
+  };
+
+  const handleStageMouseLeave = () => {
+    setCursorWorld(null);
+  };
+
   return (
     <div
       data-testid="board-canvas"
@@ -253,6 +284,8 @@ export function BoardCanvas({ objects: propsObjects, onObjectsChange }: BoardCan
           y={position.y}
           draggable={false}
           onMouseDown={handleStageMouseDown}
+          onMouseMove={handleStageMouseMove}
+          onMouseLeave={handleStageMouseLeave}
           onWheel={handleWheel}
           onClick={handleStageClick}
         >
@@ -344,6 +377,25 @@ export function BoardCanvas({ objects: propsObjects, onObjectsChange }: BoardCan
               />
             </Group>
           );})}
+        </Layer>
+        <Layer listening={false} data-testid="other-user-cursors">
+          {otherUsers.map((other) => {
+            const pos = other.cursor ?? { x: 0, y: 0 };
+            return (
+              <Group key={other.id} x={pos.x} y={pos.y} data-testid={`cursor-${other.id}`}>
+                <Circle radius={8} fill={other.color} stroke="#fff" strokeWidth={2} />
+                <Text
+                  x={12}
+                  y={-6}
+                  text={other.displayName}
+                  fontSize={13}
+                  fill={other.color}
+                  fontStyle="bold"
+                  listening={false}
+                />
+              </Group>
+            );
+          })}
         </Layer>
       </Stage>
       {editingSticky && (

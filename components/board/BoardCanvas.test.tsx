@@ -3,6 +3,10 @@ import { render, screen } from "@testing-library/react";
 import { BoardCanvas } from "./BoardCanvas";
 import type { BoardObject } from "@/lib/board-types";
 
+jest.mock("@/lib/board/usePresence", () => ({
+  usePresence: () => ({ otherUsers: [], error: null }),
+}));
+
 jest.mock("react-konva", () => {
   const React = require("react");
   return {
@@ -15,6 +19,7 @@ jest.mock("react-konva", () => {
     Rect: () => React.createElement("div", null),
     Line: () => React.createElement("div", null),
     Text: () => React.createElement("div", null),
+    Circle: () => React.createElement("div", null),
   };
 });
 
