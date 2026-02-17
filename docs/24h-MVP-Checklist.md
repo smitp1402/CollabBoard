@@ -68,11 +68,11 @@
 
 ## Phase 5 — Persistence & Reconnect (Hours 15–18)
 
-- [ ] **5.1** Board load: on mount, load board state from Firestore (single board)
-- [ ] **5.2** *TDD:* Persistence — test: after “refresh”, board state reloads from Firestore
-- [ ] **5.3** Close tab → presence/cursor removed (onDisconnect)
-- [ ] **5.4** Reopen → reconnect; board state intact
-- [ ] **5.5** Rapid object movement → no crashes; stable with 2–3 users
+- [x] **5.1** Board load: on mount, load board state from Firestore (single board)
+- [x] **5.2** *TDD:* Persistence — test: after “refresh”, board state reloads from Firestore
+- [x] **5.3** Close tab → presence/cursor removed (onDisconnect)
+- [x] **5.4** Reopen → reconnect; board state intact
+- [x] **5.5** Rapid object movement → no crashes; stable with 2–3 users
 
 **Checkpoint:** Board survives refresh and disconnect.
 
@@ -80,8 +80,8 @@
 
 ## Phase 6 — Single Board (no creation/sharing)
 
-- [ ] **6.1** Single board at `/board`; all authenticated users open `/board` and collaborate
-- [ ] **6.2** No create-board or share-link flow; everyone uses the same shared board. “New board” 
+- [x] **6.1** Single board at `/board`; all authenticated users open `/board` and collaborate
+- [x] **6.2** No create-board or share-link flow; everyone uses the same shared board. “New board” 
 **Checkpoint:** All auth users open /board and see the same board.
 
 ---

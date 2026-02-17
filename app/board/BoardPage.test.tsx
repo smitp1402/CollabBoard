@@ -2,10 +2,19 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { BoardPageContent } from "./BoardPageContent";
 import { AuthProvider, type AuthContextValue } from "@/lib/auth/AuthContext";
+import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
 
 const mockPush = jest.fn();
+const mockUseBoardObjects = jest.fn();
 jest.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+}));
+
+jest.mock("@/lib/board/useBoardObjects", () => ({
+  useBoardObjects: (boardId: string) => {
+    mockUseBoardObjects(boardId);
+    return { objects: [], setObjects: jest.fn(), loading: false, error: null };
+  },
 }));
 
 jest.mock("firebase/auth", () => ({
@@ -54,6 +63,7 @@ function MockAuthProvider({
 describe("BoardPage", () => {
   beforeEach(() => {
     mockPush.mockClear();
+    mockUseBoardObjects.mockClear();
   });
 
   it("redirects unauthenticated user to /", () => {
@@ -115,5 +125,25 @@ describe("BoardPage", () => {
     );
 
     expect(screen.getByTestId("board-canvas")).toBeInTheDocument();
+  });
+
+  it("uses single shared board (DEFAULT_BOARD_ID) when authenticated", () => {
+    const mockUser = { uid: "user-1", email: "test@example.com" } as any;
+    render(
+      <MockAuthProvider
+        value={{
+          user: mockUser,
+          loading: false,
+          signInWithGoogle: jest.fn(),
+          signInWithEmail: jest.fn(),
+          signUpWithEmail: jest.fn(),
+          signOut: jest.fn(),
+        }}
+      >
+        <BoardPageContent />
+      </MockAuthProvider>
+    );
+
+    expect(mockUseBoardObjects).toHaveBeenCalledWith(DEFAULT_BOARD_ID);
   });
 });

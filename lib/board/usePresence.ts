@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ref, onValue, set, onDisconnect } from "firebase/database";
+import { ref, onValue, set, onDisconnect, remove } from "firebase/database";
 import type { User } from "firebase/auth";
 import { getRealtimeDb } from "@/lib/firebase/client";
 
@@ -57,6 +57,7 @@ export function usePresence(
 
     const presencePath = `presence/${boardId}/${uid}`;
     const presenceRef = ref(db, presencePath);
+    const cursorRef = ref(db, `cursors/${boardId}/${uid}`);
     const presenceValue = { displayName, color };
     set(presenceRef, presenceValue).catch((e) =>
       setError(e instanceof Error ? e : new Error(String(e)))
@@ -119,6 +120,12 @@ export function usePresence(
     }
 
     return () => {
+      remove(presenceRef).catch((e) =>
+        setError(e instanceof Error ? e : new Error(String(e)))
+      );
+      remove(cursorRef).catch((e) =>
+        setError(e instanceof Error ? e : new Error(String(e)))
+      );
       unsubPresence();
       unsubCursors();
       if (throttleTimerRef.current) {

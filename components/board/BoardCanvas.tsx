@@ -478,6 +478,24 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
         >
           Add rectangle
         </button>
+        <button
+          type="button"
+          className="btn_ghost"
+          onClick={() => {
+            if (selectedId) {
+              setObjects(objects.filter((o) => o.id !== selectedId));
+              setSelectedId(null);
+            }
+          }}
+          disabled={!selectedId}
+          data-testid="delete-object"
+          style={{
+            flex: "0 0 auto",
+            opacity: selectedId ? 1 : 0.5,
+          }}
+        >
+          Delete
+        </button>
       </div>
     </div>
   );

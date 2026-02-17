@@ -28,8 +28,13 @@ jest.mock("firebase/database", () => ({
   },
   set: () => Promise.resolve(),
   update: () => Promise.resolve(),
+  remove: jest.fn(() => Promise.resolve()),
   onDisconnect: () => ({ remove: () => Promise.resolve() }),
 }));
+
+const firebaseDatabase = jest.requireMock("firebase/database") as {
+  remove: jest.Mock;
+};
 
 function createMockUser(uid: string, displayName: string): User {
   return { uid, displayName } as User;
@@ -39,6 +44,7 @@ describe("usePresence", () => {
   beforeEach(() => {
     presenceCallbacks.length = 0;
     cursorsCallbacks.length = 0;
+    firebaseDatabase.remove.mockClear();
   });
 
   it("includes second user in otherUsers when presence and cursor are emitted", async () => {
@@ -118,5 +124,21 @@ describe("usePresence", () => {
     );
     expect(result.current.otherUsers).toEqual([]);
     expect(presenceCallbacks).toHaveLength(0);
+  });
+
+  it("calls remove for presence and cursor on unmount (sign-out)", async () => {
+    const user = createMockUser("user1", "Alice");
+    const { unmount } = renderHook(() =>
+      usePresence("default", user, { x: 0, y: 0 })
+    );
+
+    expect(firebaseDatabase.remove).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(firebaseDatabase.remove).toHaveBeenCalledTimes(2);
+    const paths = firebaseDatabase.remove.mock.calls.map(([ref]: [{ _path: string }]) => ref._path);
+    expect(paths).toContain("presence/default/user1");
+    expect(paths).toContain("cursors/default/user1");
   });
 });

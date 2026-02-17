@@ -59,4 +59,21 @@ describe("BoardCanvas", () => {
     render(<BoardCanvas objects={objects} />);
     expect(screen.getByTestId("rect-rect-a")).toBeInTheDocument();
   });
+
+  it("renders Delete button below add tools and it is disabled when nothing selected", () => {
+    render(<BoardCanvas />);
+    const deleteBtn = screen.getByTestId("delete-object");
+    expect(deleteBtn).toBeInTheDocument();
+    expect(deleteBtn).toBeDisabled();
+  });
+
+  it("Delete button click does nothing when nothing is selected", () => {
+    const objects: BoardObject[] = [
+      { id: "sticky-1", type: "sticky", x: 0, y: 0, width: 120, height: 80, text: "Hi" },
+    ];
+    const onObjectsChange = jest.fn();
+    render(<BoardCanvas objects={objects} onObjectsChange={onObjectsChange} />);
+    screen.getByTestId("delete-object").click();
+    expect(onObjectsChange).not.toHaveBeenCalled();
+  });
 });
