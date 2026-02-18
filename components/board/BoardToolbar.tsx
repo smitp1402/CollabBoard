@@ -7,17 +7,18 @@ export type BoardTool = "selection" | "sticky" | "rectangle" | "text" | "frame" 
 function IconSelection() {
   return (
     <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M4 4l6 6-2.5 9L14 14l6 6" />
+      <path d="M4 4l7 16 2.5-6.5L20 14 4 4z" />
+      <path d="M14 10l4 4" />
     </svg>
   );
 }
 function IconSticky() {
   return (
     <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M15 3H7a1 1 0 0 0-1 1v14l5-5 5 5V4a1 1 0 0 0-1-1z" />
-      <path d="M14 3v5h5" />
-      <line x1="9" y1="9" x2="13" y2="9" />
-      <line x1="9" y1="12" x2="12" y2="12" />
+      <path d="M6 3h10l5 5v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
+      <path d="M16 3v5h5" />
+      <line x1="8" y1="10" x2="14" y2="10" />
+      <line x1="8" y1="14" x2="12" y2="14" />
     </svg>
   );
 }
@@ -38,8 +39,8 @@ function IconText() {
 function IconFrame() {
   return (
     <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <rect x="4" y="4" width="14" height="16" rx="1" />
-      <rect x="8" y="6" width="14" height="16" rx="1" />
+      <rect x="3" y="3" width="18" height="18" rx="1" strokeDasharray="4 2" />
+      <line x1="3" y1="8" x2="21" y2="8" />
     </svg>
   );
 }
