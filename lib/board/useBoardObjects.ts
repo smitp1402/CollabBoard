@@ -77,14 +77,35 @@ export function useBoardObjects(boardId: string): {
           setDoc(ref, toFirestoreObject(obj)).catch((e) => setError(e instanceof Error ? e : new Error(String(e))));
         } else {
           const prev = currentMap.get(obj.id);
-          if (prev && (prev.x !== obj.x || prev.y !== obj.y || (prev.type === "sticky" && prev.text !== (obj as Extract<BoardObject, { type: "sticky" }>).text))) {
-            const updates: DocumentData = {};
-            if (prev.x !== obj.x) updates.x = obj.x;
-            if (prev.y !== obj.y) updates.y = obj.y;
-            if (obj.type === "sticky" && prev.type === "sticky" && prev.text !== obj.text) updates.text = obj.text;
-            if (Object.keys(updates).length > 0) {
-              updateDoc(ref, updates).catch((e) => setError(e instanceof Error ? e : new Error(String(e))));
+          if (!prev || prev.type !== obj.type) continue;
+          const updates: DocumentData = {};
+          if (prev.x !== obj.x) updates.x = obj.x;
+          if (prev.y !== obj.y) updates.y = obj.y;
+          if (obj.type !== "connector") {
+            const p = prev as Extract<BoardObject, { type: "sticky" | "rectangle" | "text" | "frame" }>;
+            const o = obj as Extract<BoardObject, { type: "sticky" | "rectangle" | "text" | "frame" }>;
+            if (p.width !== o.width) updates.width = o.width;
+            if (p.height !== o.height) updates.height = o.height;
+            if (p.rotation !== o.rotation) updates.rotation = o.rotation;
+            if (obj.type === "sticky" && prev.type === "sticky") {
+              if (prev.text !== obj.text) updates.text = obj.text;
+              if (prev.color !== obj.color) updates.color = obj.color;
             }
+            if (obj.type === "text" && prev.type === "text") {
+              if (prev.text !== obj.text) updates.text = obj.text;
+              if (prev.fontSize !== obj.fontSize) updates.fontSize = obj.fontSize;
+              if (prev.color !== obj.color) updates.color = obj.color;
+              if (prev.width !== obj.width) updates.width = obj.width;
+              if (prev.height !== obj.height) updates.height = obj.height;
+            }
+            if (obj.type === "frame" && prev.type === "frame" && prev.title !== obj.title) updates.title = obj.title;
+          } else {
+            if (prev.fromId !== obj.fromId) updates.fromId = obj.fromId;
+            if (prev.toId !== obj.toId) updates.toId = obj.toId;
+            if (prev.style !== obj.style) updates.style = obj.style;
+          }
+          if (Object.keys(updates).length > 0) {
+            updateDoc(ref, updates).catch((e) => setError(e instanceof Error ? e : new Error(String(e))));
           }
         }
       }

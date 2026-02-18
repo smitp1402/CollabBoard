@@ -10,6 +10,8 @@ jest.mock("@/lib/firebase/client", () => ({
   app: null,
 }));
 
+const updateDocMock = jest.fn(() => Promise.resolve());
+
 jest.mock("firebase/firestore", () => ({
   collection: () => ({
     onSnapshot: (callback: (snapshot: unknown) => void) => {
@@ -27,7 +29,7 @@ jest.mock("firebase/firestore", () => ({
     };
   },
   setDoc: () => Promise.resolve(),
-  updateDoc: () => Promise.resolve(),
+  updateDoc: (...args: unknown[]) => updateDocMock(...args),
   deleteDoc: () => Promise.resolve(),
 }));
 
@@ -142,5 +144,46 @@ describe("useBoardObjects", () => {
 
     expect(result.current.objects).toHaveLength(1);
     expect(result.current.objects[0]).toMatchObject({ id: "sticky-1", x: 90, text: "Step 9" });
+  });
+
+  it("calls updateDoc with color when setObjects is called with only a color change", async () => {
+    updateDocMock.mockClear();
+    const initialSnapshot = createMockSnapshot([
+      {
+        id: "sticky-1",
+        data: () => ({
+          type: "sticky",
+          x: 0,
+          y: 0,
+          width: 120,
+          height: 80,
+          text: "Note",
+          color: "#fef08a",
+        }),
+      },
+    ]);
+
+    const { result } = renderHook(() => useBoardObjects("board-1"));
+
+    await act(() => {
+      snapshotCallback?.(initialSnapshot);
+    });
+
+    expect(result.current.objects).toHaveLength(1);
+    expect(result.current.objects[0].color).toBe("#fef08a");
+
+    await act(() => {
+      result.current.setObjects([
+        {
+          ...result.current.objects[0],
+          color: "#fecaca",
+        },
+      ]);
+    });
+
+    expect(updateDocMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ color: "#fecaca" })
+    );
   });
 });

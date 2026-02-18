@@ -5,8 +5,19 @@ import { Stage, Layer, Rect, Line, Group, Text, Circle } from "react-konva";
 import type { KonvaEventObject, Node as KonvaNode } from "konva/lib/Node";
 import type { User } from "firebase/auth";
 import type { BoardObject } from "@/lib/board-types";
-import { isSticky, isRectangle } from "@/lib/board-types";
+import { isSticky, isRectangle, isText, isFrame, isConnector, hasBounds, getObjectBounds, rectsIntersect } from "@/lib/board-types";
+import { SelectionBox } from "@/components/board/selection/SelectionBox";
+import { TransformHandles } from "@/components/board/selection/TransformHandles";
+import { StickyObject } from "@/components/board/objects/StickyObject";
+import { RectangleObject } from "@/components/board/objects/RectangleObject";
+import { TextObject } from "@/components/board/objects/TextObject";
+import { FrameObject } from "@/components/board/objects/FrameObject";
+import { ConnectorLayer } from "@/components/board/objects/ConnectorLayer";
+import { BoardToolbar, type BoardTool } from "@/components/board/BoardToolbar";
+import { CanvasControlPanel } from "@/components/board/CanvasControlPanel";
+import { ColorPalettePopup } from "@/components/board/popups/ColorPalettePopup";
 import { usePresence, type PresenceUser } from "@/lib/board/usePresence";
+import { duplicateObjects, copyObjects, pasteObjects } from "@/lib/board/boardOperations";
 
 const GRID_SPACING = 48;
 const GRID_STROKE = "#e2e8f0";
@@ -35,8 +46,70 @@ function updateObjectText(
   text: string
 ): BoardObject[] {
   return objects.map((obj) =>
-    obj.type === "sticky" && obj.id === id ? { ...obj, text } : obj
+    obj.id === id && (obj.type === "sticky" || obj.type === "text") ? { ...obj, text } : obj
   );
+}
+
+function updateObjectColor(
+  objects: BoardObject[],
+  id: string,
+  color: string
+): BoardObject[] {
+  return objects.map((obj) => (obj.id === id ? { ...obj, color } : obj));
+}
+
+function updateObjectBounds(
+  objects: BoardObject[],
+  id: string,
+  bounds: { x?: number; y?: number; width?: number; height?: number }
+): BoardObject[] {
+  return objects.map((obj) => {
+    if (obj.id !== id) return obj;
+    if (obj.type === "connector") return obj;
+    return {
+      ...obj,
+      ...(bounds.x !== undefined && { x: bounds.x }),
+      ...(bounds.y !== undefined && { y: bounds.y }),
+      ...(bounds.width !== undefined && { width: bounds.width }),
+      ...(bounds.height !== undefined && { height: bounds.height }),
+    } as BoardObject;
+  });
+}
+
+function updateObjectRotation(objects: BoardObject[], id: string, rotation: number): BoardObject[] {
+  return objects.map((obj) => {
+    if (obj.id !== id) return obj;
+    if (obj.type === "connector") return obj;
+    return { ...obj, rotation } as BoardObject;
+  });
+}
+
+/** Apply multiple updates (bounds and/or rotation) to objects. */
+function applyObjectUpdates(
+  objects: BoardObject[],
+  updates: Array<{
+    id: string;
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    rotation?: number;
+  }>
+): BoardObject[] {
+  const byId = new Map(objects.map((o) => [o.id, o]));
+  for (const u of updates) {
+    const obj = byId.get(u.id);
+    if (!obj || obj.type === "connector") continue;
+    byId.set(u.id, {
+      ...obj,
+      ...(u.x !== undefined && { x: u.x }),
+      ...(u.y !== undefined && { y: u.y }),
+      ...(u.width !== undefined && { width: u.width }),
+      ...(u.height !== undefined && { height: u.height }),
+      ...(u.rotation !== undefined && { rotation: u.rotation }),
+    } as BoardObject);
+  }
+  return Array.from(byId.values());
 }
 
 type BoardCanvasProps = {
@@ -59,20 +132,72 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [cursorWorld, setCursorWorld] = useState<{ x: number; y: number } | null>(null);
   const [editingStickyId, setEditingStickyId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<"sticky" | "rectangle" | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const [copiedObjects, setCopiedObjects] = useState<BoardObject[] | null>(null);
+  const [activeTool, setActiveTool] = useState<BoardTool>(null);
+  const [connectorFromId, setConnectorFromId] = useState<string | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
+  const [canvasLocked, setCanvasLocked] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const didPanRef = useRef(false);
   const lastPinchRef = useRef<{ distance: number; centerX: number; centerY: number } | null>(null);
   const scaleRef = useRef(scale);
   const positionRef = useRef(position);
+  const canvasLockedRef = useRef(canvasLocked);
   const lastPlaceTimeRef = useRef(0);
+  const marqueeRectRef = useRef<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const justFinishedMarqueeRef = useRef(false);
 
   useEffect(() => {
     scaleRef.current = scale;
     positionRef.current = position;
   }, [scale, position]);
+
+  useEffect(() => {
+    canvasLockedRef.current = canvasLocked;
+  }, [canvasLocked]);
+
+  useEffect(() => {
+    marqueeRectRef.current = marqueeRect;
+  }, [marqueeRect]);
+
+  useEffect(() => {
+    if (!marqueeRect) return;
+    const onMouseMove = (e: MouseEvent) => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const stageX = e.clientX - rect.left;
+      const stageY = e.clientY - rect.top;
+      const worldX = (stageX - positionRef.current.x) / scaleRef.current;
+      const worldY = (stageY - positionRef.current.y) / scaleRef.current;
+      setMarqueeRect((prev) => (prev ? { ...prev, endX: worldX, endY: worldY } : null));
+    };
+    const onMouseUp = () => {
+      const current = marqueeRectRef.current;
+      setMarqueeRect(null);
+      if (!current) return;
+      justFinishedMarqueeRef.current = true;
+      const { startX, startY, endX, endY } = current;
+      const minX = Math.min(startX, endX);
+      const maxX = Math.max(startX, endX);
+      const minY = Math.min(startY, endY);
+      const maxY = Math.max(startY, endY);
+      const marquee = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+      const ids = objects.filter((o) => {
+        const b = getObjectBounds(o);
+        return b && rectsIntersect(marquee, b);
+      }).map((o) => o.id);
+      setSelectedIds(ids);
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [marqueeRect, objects]);
 
   const { otherUsers, error: presenceError } = usePresence(boardId ?? "", user ?? null, cursorWorld);
 
@@ -134,7 +259,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
 
   useEffect(() => {
     const onTouchMove = (e: TouchEvent) => {
-      if (e.touches.length !== 2 || !lastPinchRef.current) return;
+      if (e.touches.length !== 2 || !lastPinchRef.current || canvasLockedRef.current) return;
       e.preventDefault();
       const t0 = e.touches[0];
       const t1 = e.touches[1];
@@ -173,6 +298,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
 
   const handleWheel = (e: KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault();
+    if (canvasLocked) return;
     const stage = e.target.getStage();
     if (!stage) return;
     const oldScale = scale;
@@ -191,6 +317,34 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       y: pointer.y - mousePointTo.y * clampedScale,
     });
   };
+
+  const handleZoomIn = useCallback(() => {
+    const oldScale = scale;
+    const scaleBy = 1.1;
+    const newScale = Math.min(oldScale * scaleBy, 5);
+    if (newScale === oldScale) return;
+    const centerWorldX = (size.width / 2 - position.x) / oldScale;
+    const centerWorldY = (size.height / 2 - position.y) / oldScale;
+    setScale(newScale);
+    setPosition({
+      x: size.width / 2 - centerWorldX * newScale,
+      y: size.height / 2 - centerWorldY * newScale,
+    });
+  }, [scale, position, size.width, size.height]);
+
+  const handleZoomOut = useCallback(() => {
+    const oldScale = scale;
+    const scaleBy = 1.1;
+    const newScale = Math.max(oldScale / scaleBy, 0.2);
+    if (newScale === oldScale) return;
+    const centerWorldX = (size.width / 2 - position.x) / oldScale;
+    const centerWorldY = (size.height / 2 - position.y) / oldScale;
+    setScale(newScale);
+    setPosition({
+      x: size.width / 2 - centerWorldX * newScale,
+      y: size.height / 2 - centerWorldY * newScale,
+    });
+  }, [scale, position, size.width, size.height]);
 
   // Infinite canvas: visible area in stage (world) coordinates
   const viewport = useMemo(() => {
@@ -230,8 +384,13 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
 
   const stickies = objects.filter(isSticky);
   const rectangles = objects.filter(isRectangle);
+  const textObjects = objects.filter(isText);
+  const frameObjects = objects.filter(isFrame);
   const editingSticky = editingStickyId
     ? stickies.find((s) => s.id === editingStickyId)
+    : null;
+  const editingText = editingTextId
+    ? textObjects.find((t) => t.id === editingTextId)
     : null;
 
   const placeSticky = useCallback(
@@ -246,6 +405,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           width: 120,
           height: 80,
           text: "New note",
+          color: DEFAULT_STICKY_COLOR,
         },
       ]);
     },
@@ -263,6 +423,43 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           y: worldY,
           width: 100,
           height: 80,
+          color: DEFAULT_RECT_COLOR,
+        },
+      ]);
+    },
+    [objects, setObjects]
+  );
+
+  const placeText = useCallback(
+    (worldX: number, worldY: number) => {
+      setObjects([
+        ...objects,
+        {
+          id: crypto.randomUUID(),
+          type: "text",
+          x: worldX,
+          y: worldY,
+          width: 160,
+          height: 32,
+          text: "Text",
+        },
+      ]);
+    },
+    [objects, setObjects]
+  );
+
+  const placeFrame = useCallback(
+    (worldX: number, worldY: number) => {
+      setObjects([
+        ...objects,
+        {
+          id: crypto.randomUUID(),
+          type: "frame",
+          x: worldX,
+          y: worldY,
+          width: 280,
+          height: 180,
+          title: "Frame",
         },
       ]);
     },
@@ -273,6 +470,12 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     if (!editingStickyId) return;
     setObjects(updateObjectText(objects, editingStickyId, newText));
     setEditingStickyId(null);
+  };
+
+  const handleTextObjectSave = (newText: string) => {
+    if (!editingTextId) return;
+    setObjects(updateObjectText(objects, editingTextId, newText));
+    setEditingTextId(null);
   };
 
   const getPointerFromEvent = useCallback(
@@ -292,15 +495,17 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const tryPlaceAtPointer = useCallback(
     (pointer: { x: number; y: number }) => {
       if (Date.now() - lastPlaceTimeRef.current < TAP_PLACE_DEDUPE_MS) return;
-      if (activeTool !== "sticky" && activeTool !== "rectangle") return;
+      if (activeTool !== "sticky" && activeTool !== "rectangle" && activeTool !== "text" && activeTool !== "frame") return;
       if (didPanRef.current) return;
       lastPlaceTimeRef.current = Date.now();
       const worldX = (pointer.x - position.x) / scale;
       const worldY = (pointer.y - position.y) / scale;
       if (activeTool === "sticky") placeSticky(worldX, worldY);
-      else placeRectangle(worldX, worldY);
+      else if (activeTool === "rectangle") placeRectangle(worldX, worldY);
+      else if (activeTool === "text") placeText(worldX, worldY);
+      else if (activeTool === "frame") placeFrame(worldX, worldY);
     },
-    [activeTool, position, scale, placeSticky, placeRectangle]
+    [activeTool, position, scale, placeSticky, placeRectangle, placeText, placeFrame]
   );
 
   const handleStageClick = (e: KonvaEventObject<MouseEvent>) => {
@@ -309,23 +514,55 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     const clickedOnEmpty = e.target === stage || e.target.name() === "stage-bg";
     if (clickedOnEmpty) {
       const pointer = getPointerFromEvent(e as KonvaEventObject<MouseEvent | TouchEvent>, stage);
-      if (pointer && (activeTool === "sticky" || activeTool === "rectangle") && !didPanRef.current) {
+      if (pointer && (activeTool === "sticky" || activeTool === "rectangle" || activeTool === "text" || activeTool === "frame") && !didPanRef.current) {
         tryPlaceAtPointer(pointer);
         return;
       }
-      setSelectedId(null);
+      if (activeTool === "connector") setConnectorFromId(null);
+      if (!marqueeRect && !justFinishedMarqueeRef.current) setSelectedIds([]);
+      justFinishedMarqueeRef.current = false;
       return;
     }
     let node: KonvaNode | null = e.target;
     while (node) {
       const name = node.name();
       if (typeof name === "string" && name.startsWith("obj-")) {
-        setSelectedId(name.slice(4));
+        const id = name.slice(4);
+        const targetObj = objects.find((o) => o.id === id);
+        const canConnect = targetObj && !isConnector(targetObj);
+
+        if (activeTool === "connector" && canConnect) {
+          if (connectorFromId === null) {
+            setConnectorFromId(id);
+            setSelectedIds([id]);
+            return;
+          }
+          if (id === connectorFromId) {
+            setConnectorFromId(null);
+            return;
+          }
+          setObjects([
+            ...objects,
+            { id: crypto.randomUUID(), type: "connector", fromId: connectorFromId, toId: id, style: "line" },
+          ]);
+          setConnectorFromId(null);
+          setSelectedIds([id]);
+          return;
+        }
+
+        if (e.evt.shiftKey) {
+          setSelectedIds((prev) =>
+            prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+          );
+        } else {
+          setSelectedIds([id]);
+        }
         return;
       }
       node = node.getParent();
     }
-    setSelectedId(null);
+    if (activeTool === "connector") setConnectorFromId(null);
+    setSelectedIds([]);
   };
 
   const handleStageTap = (e: KonvaEventObject<MouseEvent | TouchEvent>) => {
@@ -339,12 +576,21 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   };
 
   const handleStageMouseDown = (e: KonvaEventObject<MouseEvent>) => {
+    if (canvasLocked) return;
     const target = e.target;
-    const clickedOnEmpty = target === target.getStage() || target.name() === "stage-bg";
+    const stage = target.getStage();
+    const clickedOnEmpty = target === stage || target.name() === "stage-bg";
     if (clickedOnEmpty) {
       didPanRef.current = false;
-      panStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
-      setIsPanning(true);
+      const pointer = stage?.getPointerPosition();
+      if (pointer && (activeTool === "sticky" || activeTool === "rectangle" || activeTool === "text" || activeTool === "frame" || activeTool === "connector")) {
+        panStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+        setIsPanning(true);
+      } else if (pointer) {
+        const worldX = (pointer.x - position.x) / scale;
+        const worldY = (pointer.y - position.y) / scale;
+        setMarqueeRect({ startX: worldX, startY: worldY, endX: worldX, endY: worldY });
+      }
     }
   };
 
@@ -353,6 +599,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     if (!stage) return;
     const ev = e.evt;
     if (ev.touches.length === 2) {
+      if (canvasLocked) return;
       const t0 = ev.touches[0];
       const t1 = ev.touches[1];
       lastPinchRef.current = {
@@ -363,7 +610,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       ev.preventDefault();
       return;
     }
-    if (ev.touches.length === 1) {
+    if (ev.touches.length === 1 && !canvasLocked) {
       const target = e.target;
       const clickedOnEmpty = target === stage || target.name() === "stage-bg";
       if (clickedOnEmpty) {
@@ -388,6 +635,46 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     setCursorWorld(null);
   };
 
+  const handleDuplicate = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    const { nextObjects, newIds } = duplicateObjects(objects, selectedIds);
+    setObjects(nextObjects);
+    setSelectedIds(newIds);
+  }, [objects, selectedIds, setObjects]);
+
+  const handleCopy = useCallback(() => {
+    if (selectedIds.length === 0) return;
+    setCopiedObjects(copyObjects(objects, selectedIds));
+  }, [objects, selectedIds]);
+
+  const handlePaste = useCallback(() => {
+    if (!copiedObjects || copiedObjects.length === 0) return;
+    const pasted = pasteObjects(copiedObjects);
+    setObjects([...objects, ...pasted]);
+    setSelectedIds(pasted.map((o) => o.id));
+  }, [copiedObjects, objects, setObjects]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === "d") {
+          e.preventDefault();
+          handleDuplicate();
+        }
+        if (e.key === "c") {
+          e.preventDefault();
+          handleCopy();
+        }
+        if (e.key === "v") {
+          e.preventDefault();
+          handlePaste();
+        }
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [handleDuplicate, handleCopy, handlePaste]);
+
   return (
     <div
       data-testid="board-canvas"
@@ -400,7 +687,25 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
         position: "relative",
       }}
     >
-      <div style={{ flex: 1, minHeight: 0, position: "relative" }} ref={containerRef}>
+      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
+      <BoardToolbar
+        activeTool={activeTool}
+        setActiveTool={setActiveTool}
+        selectedIds={selectedIds}
+        copiedObjectsCount={copiedObjects?.length ?? 0}
+        onConnectorToolChange={() => setConnectorFromId(null)}
+        onDuplicate={handleDuplicate}
+        onCopy={handleCopy}
+        onPaste={handlePaste}
+        onDelete={() => {
+          if (selectedIds.length > 0) {
+            const idSet = new Set(selectedIds);
+            setObjects(objects.filter((o) => !idSet.has(o.id)));
+            setSelectedIds([]);
+          }
+        }}
+      />
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative" }} ref={containerRef}>
         <Stage
           width={size.width}
           height={size.height}
@@ -445,67 +750,80 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
               listening={false}
             />
           ))}
-          {stickies.map((obj) => {
-            const isSelected = selectedId === obj.id;
-            return (
-            <Group
+          {stickies.map((obj) => (
+            <StickyObject
               key={obj.id}
-              name={`obj-${obj.id}`}
-              data-testid={`sticky-${obj.id}`}
-              x={obj.x}
-              y={obj.y}
-              draggable
+              obj={obj}
+              isSelected={selectedIds.includes(obj.id)}
               onDragEnd={(e) => {
                 const node = e.target;
                 setObjects(updateObjectPosition(objects, obj.id, node.x(), node.y()));
               }}
+              onSelect={() => {}}
               onDblClick={() => setEditingStickyId(obj.id)}
-            >
-              <Rect
-                width={obj.width}
-                height={obj.height}
-                fill={obj.color ?? DEFAULT_STICKY_COLOR}
-                cornerRadius={4}
-                stroke={isSelected ? SELECTION_STROKE : "#e5e5e5"}
-                strokeWidth={isSelected ? SELECTION_STROKE_WIDTH : 1}
-              />
-              <Text
-                x={8}
-                y={8}
-                width={obj.width - 16}
-                height={obj.height - 16}
-                text={obj.text}
-                fontSize={14}
-                wrap="word"
-                listening={false}
-              />
-            </Group>
-          );})}
-          {rectangles.map((obj) => {
-            const isSelected = selectedId === obj.id;
-            return (
-            <Group
+            />
+          ))}
+          {rectangles.map((obj) => (
+            <RectangleObject
               key={obj.id}
-              name={`obj-${obj.id}`}
-              data-testid={`rect-${obj.id}`}
-              x={obj.x}
-              y={obj.y}
-              draggable
+              obj={obj}
+              isSelected={selectedIds.includes(obj.id)}
               onDragEnd={(e) => {
                 const node = e.target;
                 setObjects(updateObjectPosition(objects, obj.id, node.x(), node.y()));
               }}
-            >
-              <Rect
-                width={obj.width}
-                height={obj.height}
-                fill={obj.color ?? DEFAULT_RECT_COLOR}
-                stroke={isSelected ? SELECTION_STROKE : "#c7d2fe"}
-                strokeWidth={isSelected ? SELECTION_STROKE_WIDTH : 1}
-              />
-            </Group>
-          );})}
+              onSelect={() => {}}
+            />
+          ))}
+          {textObjects.map((obj) => (
+            <TextObject
+              key={obj.id}
+              obj={obj}
+              isSelected={selectedIds.includes(obj.id)}
+              onDragEnd={(e) => {
+                const node = e.target;
+                setObjects(updateObjectPosition(objects, obj.id, node.x(), node.y()));
+              }}
+              onSelect={() => {}}
+              onDblClick={() => setEditingTextId(obj.id)}
+            />
+          ))}
+          {frameObjects.map((obj) => (
+            <FrameObject
+              key={obj.id}
+              obj={obj}
+              isSelected={selectedIds.includes(obj.id)}
+              onDragEnd={(e) => {
+                const node = e.target;
+                setObjects(updateObjectPosition(objects, obj.id, node.x(), node.y()));
+              }}
+              onSelect={() => {}}
+            />
+          ))}
         </Layer>
+        <ConnectorLayer objects={objects} />
+        {marqueeRect && (() => {
+          const { startX, startY, endX, endY } = marqueeRect;
+          const x = Math.min(startX, endX);
+          const y = Math.min(startY, endY);
+          const width = Math.abs(endX - startX);
+          const height = Math.abs(endY - startY);
+          return (
+            <Layer listening={false}>
+              <SelectionBox x={x} y={y} width={width} height={height} />
+            </Layer>
+          );
+        })()}
+        {selectedIds.length > 0 && (
+          <TransformHandles
+            selectedIds={selectedIds}
+            objects={objects}
+            scale={scale}
+            position={position}
+            onResize={(updates) => setObjects(applyObjectUpdates(objects, updates))}
+            onRotate={(updates) => setObjects(applyObjectUpdates(objects, updates))}
+          />
+        )}
         <Layer listening={false} data-testid="other-user-cursors">
           {otherUsers.map((other) => {
             const pos = other.cursor ?? { x: 0, y: 0 };
@@ -526,6 +844,34 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           })}
         </Layer>
       </Stage>
+      {selectedIds.length === 1 && (() => {
+        const selectedObject = objects.find((o) => o.id === selectedIds[0]);
+        const isStickyOrRect = selectedObject && (selectedObject.type === "sticky" || selectedObject.type === "rectangle");
+        if (!isStickyOrRect || !selectedObject) return null;
+        const effectiveColor =
+          "color" in selectedObject
+            ? selectedObject.color ?? (selectedObject.type === "sticky" ? DEFAULT_STICKY_COLOR : DEFAULT_RECT_COLOR)
+            : "";
+        const POPUP_EST_WIDTH = 280;
+        const POPUP_EST_HEIGHT = 72;
+        const gap = 8;
+        let popupLeft = position.x + selectedObject.x * scale;
+        let popupTop = position.y + selectedObject.y * scale + selectedObject.height * scale + gap;
+        popupLeft = Math.max(0, Math.min(popupLeft, size.width - POPUP_EST_WIDTH));
+        if (popupTop + POPUP_EST_HEIGHT > size.height) {
+          popupTop = position.y + selectedObject.y * scale - POPUP_EST_HEIGHT - gap;
+        }
+        popupTop = Math.max(0, Math.min(popupTop, size.height - POPUP_EST_HEIGHT));
+        return (
+          <ColorPalettePopup
+            left={popupLeft}
+            top={popupTop}
+            selectedId={selectedIds[0]}
+            effectiveColor={effectiveColor}
+            onColorSelect={(hex) => setObjects(updateObjectColor(objects, selectedIds[0], hex))}
+          />
+        );
+      })()}
       {editingSticky && (
         <textarea
           data-testid="sticky-edit-input"
@@ -561,69 +907,47 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           }}
         />
       )}
-      </div>
-      <div
-        style={{
-          flex: "0 0 auto",
-          padding: "var(--space-1) var(--space-2)",
-          borderTop: "1px solid var(--color-border)",
-          background: "var(--color-surface)",
-          display: "flex",
-          justifyContent: "center",
-          gap: "var(--space-1)",
-          alignItems: "center",
-        }}
-      >
-        <button
-          type="button"
-          className="btn_ghost"
-          onClick={() => setActiveTool((t) => (t === "sticky" ? null : "sticky"))}
-          data-testid="add-sticky"
-          style={{
-            flex: "0 0 auto",
-            ...(activeTool === "sticky" && {
-              borderColor: "var(--color-primary)",
-              color: "var(--color-primary)",
-              backgroundColor: "var(--color-canvas)",
-            }),
+      {editingText && (
+        <textarea
+          data-testid="text-edit-input"
+          value={editingText.text}
+          onChange={(e) => {
+            const next = updateObjectText(objects, editingText.id, e.target.value);
+            setObjects(next);
           }}
-        >
-          Add sticky
-        </button>
-        <button
-          type="button"
-          className="btn_ghost"
-          onClick={() => setActiveTool((t) => (t === "rectangle" ? null : "rectangle"))}
-          data-testid="add-rectangle"
-          style={{
-            flex: "0 0 auto",
-            ...(activeTool === "rectangle" && {
-              borderColor: "var(--color-primary)",
-              color: "var(--color-primary)",
-              backgroundColor: "var(--color-canvas)",
-            }),
-          }}
-        >
-          Add rectangle
-        </button>
-        <button
-          type="button"
-          className="btn_ghost"
-          onClick={() => {
-            if (selectedId) {
-              setObjects(objects.filter((o) => o.id !== selectedId));
-              setSelectedId(null);
+          onBlur={(e) => handleTextObjectSave(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setEditingTextId(null);
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleTextObjectSave((e.target as HTMLTextAreaElement).value);
             }
           }}
-          disabled={!selectedId}
-          data-testid="delete-object"
+          autoFocus
           style={{
-            flex: "0 0 auto",
-            opacity: selectedId ? 1 : 0.5,
+            position: "absolute",
+            left: position.x + editingText.x * scale,
+            top: position.y + editingText.y * scale,
+            width: ((editingText.width ?? 160) * scale),
+            height: ((editingText.height ?? 32) * scale),
+            padding: 4,
+            margin: 0,
+            border: "1px solid var(--color-primary)",
+            borderRadius: 4,
+            fontSize: editingText.fontSize ?? 16,
+            resize: "none",
+            boxSizing: "border-box",
           }}
-        >
-          Delete
-        </button>
+        />
+      )}
+      <CanvasControlPanel
+        scale={scale}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        canvasLocked={canvasLocked}
+        onLockToggle={() => setCanvasLocked((prev) => !prev)}
+      />
+      </div>
       </div>
     </div>
   );

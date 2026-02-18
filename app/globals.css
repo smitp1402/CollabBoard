@@ -137,6 +137,55 @@ a {
   outline-offset: 2px;
 }
 
+/* Board toolbar – dark strip with light icons and green active indicator */
+.board-toolbar {
+  flex: 0 0 auto;
+  padding: var(--space-2);
+  border-right: 1px solid #404040;
+  background: #2d2d2d;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: stretch;
+}
+
+.board-toolbar__btn {
+  padding: var(--space-1);
+  color: #b0b0b0;
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.board-toolbar__btn:hover {
+  color: #d4d4d4;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.board-toolbar__btn:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+.board-toolbar__btn--active {
+  border-left-color: #22c55e;
+  color: #ffffff;
+  background: transparent;
+}
+
+.board-toolbar__btn--active:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.board-toolbar__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* Loading state */
 .loading_root {
   min-height: 100vh;
