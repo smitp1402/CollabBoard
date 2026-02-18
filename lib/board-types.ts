@@ -1,4 +1,4 @@
-﻿/** Board object types for canvas and Firestore sync. Rotation in degrees (0–360). */
+﻿/** Board object types for canvas and Firestore sync. Rotation in degrees (0-360). */
 export type BoardObject =
   | {
       id: string;
@@ -45,6 +45,26 @@ export type BoardObject =
     }
   | {
       id: string;
+      type: "circle";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color?: string;
+      rotation?: number;
+    }
+  | {
+      id: string;
+      type: "line";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      color?: string;
+      rotation?: number;
+    }
+  | {
+      id: string;
       type: "connector";
       fromId: string;
       toId: string;
@@ -67,6 +87,14 @@ export function isFrame(obj: BoardObject): obj is Extract<BoardObject, { type: "
   return obj.type === "frame";
 }
 
+export function isCircle(obj: BoardObject): obj is Extract<BoardObject, { type: "circle" }> {
+  return obj.type === "circle";
+}
+
+export function isLine(obj: BoardObject): obj is Extract<BoardObject, { type: "line" }> {
+  return obj.type === "line";
+}
+
 export function isConnector(obj: BoardObject): obj is Extract<BoardObject, { type: "connector" }> {
   return obj.type === "connector";
 }
@@ -74,8 +102,8 @@ export function isConnector(obj: BoardObject): obj is Extract<BoardObject, { typ
 /** True if the object has position and dimensions (for bounds / transform). */
 export function hasBounds(
   obj: BoardObject
-): obj is Extract<BoardObject, { type: "sticky" | "rectangle" | "text" | "frame" }> {
-  return obj.type === "sticky" || obj.type === "rectangle" || obj.type === "text" || obj.type === "frame";
+): obj is Extract<BoardObject, { type: "sticky" | "rectangle" | "text" | "frame" | "circle" | "line" }> {
+  return obj.type === "sticky" || obj.type === "rectangle" || obj.type === "text" || obj.type === "frame" || obj.type === "circle" || obj.type === "line";
 }
 
 /** Axis-aligned bounds for objects that have bounds (ignores rotation for selection). */
