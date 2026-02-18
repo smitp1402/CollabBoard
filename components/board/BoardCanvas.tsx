@@ -16,7 +16,8 @@ import { ConnectorLayer } from "@/components/board/objects/ConnectorLayer";
 import { BoardToolbar, type BoardTool } from "@/components/board/BoardToolbar";
 import { CanvasControlPanel } from "@/components/board/CanvasControlPanel";
 import { ColorPalettePopup } from "@/components/board/popups/ColorPalettePopup";
-import { usePresence, type PresenceUser } from "@/lib/board/usePresence";
+import { ObjectContextMenu } from "@/components/board/popups/ObjectContextMenu";
+import { usePresence, colorForUserId, type PresenceUser } from "@/lib/board/usePresence";
 import { duplicateObjects, copyObjects, pasteObjects } from "@/lib/board/boardOperations";
 
 const GRID_SPACING = 48;
@@ -135,11 +136,12 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [marqueeRect, setMarqueeRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const [copiedObjects, setCopiedObjects] = useState<BoardObject[] | null>(null);
-  const [activeTool, setActiveTool] = useState<BoardTool>(null);
+  const [activeTool, setActiveTool] = useState<BoardTool>("selection");
   const [connectorFromId, setConnectorFromId] = useState<string | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [canvasLocked, setCanvasLocked] = useState(false);
+  const [showColorFromContextMenu, setShowColorFromContextMenu] = useState(false);
   const panStartRef = useRef({ x: 0, y: 0 });
   const didPanRef = useRef(false);
   const lastPinchRef = useRef<{ distance: number; centerX: number; centerY: number } | null>(null);
@@ -150,6 +152,21 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const marqueeRectRef = useRef<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const justFinishedMarqueeRef = useRef(false);
 
+  const selectionBounds = useMemo(() => {
+    if (selectedIds.length === 0) return null;
+    const selected = objects.filter((o) => selectedIds.includes(o.id) && hasBounds(o));
+    const boxes = selected.map((o) => getObjectBounds(o)).filter(Boolean) as Array<{ x: number; y: number; width: number; height: number }>;
+    if (boxes.length === 0) return null;
+    const xs = boxes.flatMap((b) => [b.x, b.x + b.width]);
+    const ys = boxes.flatMap((b) => [b.y, b.y + b.height]);
+    return {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+  }, [selectedIds, objects]);
+
   useEffect(() => {
     scaleRef.current = scale;
     positionRef.current = position;
@@ -158,6 +175,10 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   useEffect(() => {
     canvasLockedRef.current = canvasLocked;
   }, [canvasLocked]);
+
+  useEffect(() => {
+    if (selectedIds.length !== 1) setShowColorFromContextMenu(false);
+  }, [selectedIds.length]);
 
   useEffect(() => {
     marqueeRectRef.current = marqueeRect;
@@ -583,13 +604,13 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
     if (clickedOnEmpty) {
       didPanRef.current = false;
       const pointer = stage?.getPointerPosition();
-      if (pointer && (activeTool === "sticky" || activeTool === "rectangle" || activeTool === "text" || activeTool === "frame" || activeTool === "connector")) {
-        panStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
-        setIsPanning(true);
-      } else if (pointer) {
+      if (pointer && activeTool === "selection" && e.evt.shiftKey) {
         const worldX = (pointer.x - position.x) / scale;
         const worldY = (pointer.y - position.y) / scale;
         setMarqueeRect({ startX: worldX, startY: worldY, endX: worldX, endY: worldY });
+      } else if (pointer) {
+        panStartRef.current = { x: e.evt.clientX, y: e.evt.clientY };
+        setIsPanning(true);
       }
     }
   };
@@ -691,19 +712,7 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       <BoardToolbar
         activeTool={activeTool}
         setActiveTool={setActiveTool}
-        selectedIds={selectedIds}
-        copiedObjectsCount={copiedObjects?.length ?? 0}
         onConnectorToolChange={() => setConnectorFromId(null)}
-        onDuplicate={handleDuplicate}
-        onCopy={handleCopy}
-        onPaste={handlePaste}
-        onDelete={() => {
-          if (selectedIds.length > 0) {
-            const idSet = new Set(selectedIds);
-            setObjects(objects.filter((o) => !idSet.has(o.id)));
-            setSelectedIds([]);
-          }
-        }}
       />
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative" }} ref={containerRef}>
         <Stage
@@ -825,6 +834,20 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
           />
         )}
         <Layer listening={false} data-testid="other-user-cursors">
+          {user && cursorWorld && (
+            <Group x={cursorWorld.x} y={cursorWorld.y} data-testid="cursor-current-user">
+              <Circle radius={8} fill={colorForUserId(user.uid)} stroke="#fff" strokeWidth={2} />
+              <Text
+                x={12}
+                y={-6}
+                text={user.displayName || user.email || "You"}
+                fontSize={13}
+                fill={colorForUserId(user.uid)}
+                fontStyle="bold"
+                listening={false}
+              />
+            </Group>
+          )}
           {otherUsers.map((other) => {
             const pos = other.cursor ?? { x: 0, y: 0 };
             return (
@@ -838,13 +861,48 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
                   fill={other.color}
                   fontStyle="bold"
                   listening={false}
-                />
+              />
               </Group>
             );
           })}
         </Layer>
       </Stage>
-      {selectedIds.length === 1 && (() => {
+      {selectedIds.length > 0 && (() => {
+        const MENU_EST_WIDTH = 180;
+        const MENU_EST_HEIGHT = 320;
+        const gap = 8;
+        let menuLeft = selectionBounds
+          ? position.x + selectionBounds.x * scale - MENU_EST_WIDTH - gap
+          : position.x + 20;
+        let menuTop = selectionBounds ? position.y + selectionBounds.y * scale : position.y + 20;
+        menuLeft = Math.max(0, Math.min(menuLeft, size.width - MENU_EST_WIDTH));
+        menuTop = Math.max(0, Math.min(menuTop, size.height - MENU_EST_HEIGHT));
+        return (
+          <ObjectContextMenu
+            left={menuLeft}
+            top={menuTop}
+            selectedIds={selectedIds}
+            objects={objects}
+            onEdit={() => {
+              if (selectedIds.length === 1) {
+                const obj = objects.find((o) => o.id === selectedIds[0]);
+                if (obj?.type === "sticky") setEditingStickyId(selectedIds[0]);
+                if (obj?.type === "text") setEditingTextId(selectedIds[0]);
+              }
+            }}
+            onColorClick={() => setShowColorFromContextMenu(true)}
+            onDelete={() => {
+              const idSet = new Set(selectedIds);
+              setObjects(objects.filter((o) => !idSet.has(o.id)));
+              setSelectedIds([]);
+              setShowColorFromContextMenu(false);
+            }}
+            onCopy={handleCopy}
+            onDuplicate={handleDuplicate}
+          />
+        );
+      })()}
+      {showColorFromContextMenu && selectedIds.length === 1 && (() => {
         const selectedObject = objects.find((o) => o.id === selectedIds[0]);
         const isStickyOrRect = selectedObject && (selectedObject.type === "sticky" || selectedObject.type === "rectangle");
         if (!isStickyOrRect || !selectedObject) return null;
@@ -868,7 +926,10 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
             top={popupTop}
             selectedId={selectedIds[0]}
             effectiveColor={effectiveColor}
-            onColorSelect={(hex) => setObjects(updateObjectColor(objects, selectedIds[0], hex))}
+            onColorSelect={(hex) => {
+              setObjects(updateObjectColor(objects, selectedIds[0], hex));
+              setShowColorFromContextMenu(false);
+            }}
           />
         );
       })()}

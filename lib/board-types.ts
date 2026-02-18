@@ -1,4 +1,4 @@
-/** Board object types for canvas and Firestore sync. Rotation in degrees (0–360). */
+﻿/** Board object types for canvas and Firestore sync. Rotation in degrees (0–360). */
 export type BoardObject =
   | {
       id: string;

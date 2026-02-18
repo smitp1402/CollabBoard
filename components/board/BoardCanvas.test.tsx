@@ -61,6 +61,11 @@ describe("BoardCanvas", () => {
     expect(screen.getByTestId("board-canvas")).toBeInTheDocument();
   });
 
+  it("renders Selection tool button", () => {
+    render(<BoardCanvas />);
+    expect(screen.getByTestId("tool-selection")).toBeInTheDocument();
+  });
+
   it("renders one sticky when given in objects", () => {
     const objects: BoardObject[] = [
       {
@@ -92,21 +97,20 @@ describe("BoardCanvas", () => {
     expect(screen.getByTestId("rect-rect-a")).toBeInTheDocument();
   });
 
-  it("renders Delete button below add tools and it is disabled when nothing selected", () => {
+  it("toolbar does not show duplicate, copy, paste, or delete buttons", () => {
     render(<BoardCanvas />);
-    const deleteBtn = screen.getByTestId("delete-object");
-    expect(deleteBtn).toBeInTheDocument();
-    expect(deleteBtn).toBeDisabled();
+    expect(screen.queryByTestId("duplicate-object")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("copy-object")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("paste-object")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("delete-object")).not.toBeInTheDocument();
   });
 
-  it("Delete button click does nothing when nothing is selected", () => {
+  it("does not show object context menu when nothing is selected", () => {
     const objects: BoardObject[] = [
-      { id: "sticky-1", type: "sticky", x: 0, y: 0, width: 120, height: 80, text: "Hi" },
+      { id: "1", type: "sticky", x: 0, y: 0, width: 120, height: 80, text: "Hi" },
     ];
-    const onObjectsChange = jest.fn();
-    render(<BoardCanvas objects={objects} onObjectsChange={onObjectsChange} />);
-    screen.getByTestId("delete-object").click();
-    expect(onObjectsChange).not.toHaveBeenCalled();
+    render(<BoardCanvas objects={objects} />);
+    expect(screen.queryByTestId("object-context-menu")).not.toBeInTheDocument();
   });
 
   it("renders sticky with custom color when given in objects", () => {
@@ -134,7 +138,7 @@ describe("BoardCanvas", () => {
     expect(screen.queryByTestId("color-palette")).not.toBeInTheDocument();
   });
 
-  it.skip("shows color palette when a sticky is selected and clicking a swatch updates color (requires Konva click bubbling)", async () => {
+  it.skip("shows context menu when sticky selected, then Color opens palette and swatch updates color (requires Konva click bubbling)", async () => {
     const user = userEvent.setup();
     const objects: BoardObject[] = [
       { id: "1", type: "sticky", x: 0, y: 0, width: 120, height: 80, text: "Hi", color: "#fef08a" },

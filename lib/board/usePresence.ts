@@ -17,7 +17,7 @@ const PRESENCE_COLORS = [
   "#ec4899",
 ];
 
-function colorForUserId(userId: string): string {
+export function colorForUserId(userId: string): string {
   let n = 0;
   for (let i = 0; i < userId.length; i++) n += userId.charCodeAt(i);
   return PRESENCE_COLORS[Math.abs(n) % PRESENCE_COLORS.length];
