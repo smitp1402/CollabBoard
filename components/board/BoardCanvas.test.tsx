@@ -20,7 +20,7 @@ jest.mock("react-konva", () => {
   const React = require("react");
   const { useRef, useLayoutEffect } = require("react");
   const Group = ({ children, name, "data-testid": testId, ...props }: { children?: React.ReactNode; name?: string; "data-testid"?: string }) => {
-    const ref = useRef<HTMLDivElement>(null);
+    const ref = useRef(null) as React.MutableRefObject<HTMLDivElement | null>;
     useLayoutEffect(() => {
       if (!ref.current) return;
       const el = ref.current as unknown as { getStage: () => Element | null; name: () => string; getParent: () => null };
@@ -31,7 +31,7 @@ jest.mock("react-konva", () => {
     return React.createElement("div", { ref, "data-testid": testId, ...props }, children);
   };
   const nodeWithGetParent = () => {
-    const ref = useRef<HTMLDivElement>(null);
+    const ref = useRef(null) as React.MutableRefObject<HTMLDivElement | null>;
     useLayoutEffect(() => {
       if (ref.current) {
         const el = ref.current as unknown as { getParent: () => Node | null; name: () => string; getStage: () => Element | null };
