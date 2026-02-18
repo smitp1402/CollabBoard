@@ -1,0 +1,38 @@
+---
+description: After every change, provide a technical summary of what was changed and what each file does
+alwaysApply: true
+---
+
+# Change Summary (Technical)
+
+After **every** edit or set of related edits, provide a short **technical summary** so the user understands what changed and what each touched file is responsible for.
+
+## What to Include
+
+1. **Summary line**  
+   One sentence: what was done (e.g. “Added color palette for sticky notes and persisted color in Firestore”).
+
+2. **File-by-file breakdown**  
+   For each file you created or modified, give:
+   - **What the file does** — its role in the project (e.g. “Canvas component: renders the board, tools, and objects; handles pan/zoom and object selection.”).
+   - **What changed** — concrete edits (e.g. “Added `STICKY_COLOR_PALETTE`, `updateObjectColor()`, and a color swatch toolbar shown when a sticky or rectangle is selected.”).
+
+Keep each file to 2–4 lines. Use clear, technical language (function names, props, data flow) so the user can map changes to behavior.
+
+## Example
+
+**Summary:** Sticky notes now support a color palette; selecting a sticky or rectangle shows swatches and color is persisted to Firestore.
+
+| File | What it does | What changed |
+|------|----------------|--------------|
+| `lib/board/useBoardObjects.ts` | Hook that loads/saves board objects from Firestore and exposes `objects` / `setObjects`. | Included `color` in the update diff and in `updateDoc` payload so color changes are persisted. |
+| `components/board/BoardCanvas.tsx` | Renders the infinite canvas, grid, sticky/rect objects, toolbar, and presence cursors; handles place/drag/select and sticky text edit. | Added `STICKY_COLOR_PALETTE`, `updateObjectColor()`, color swatch UI when a sticky/rect is selected, and default `color` in `placeSticky` / `placeRectangle`. |
+| `components/board/BoardCanvas.test.tsx` | Unit tests for BoardCanvas (render, tools, selection, delete). | Extended Group mock so selection works; added tests for custom-color sticky, palette visibility when selected, and swatch click updating color via `onObjectsChange`. |
+
+## When to Apply
+
+- After implementing a feature, fix, or refactor that touches one or more files.
+- After a batch of edits in a single turn: one summary covering all touched files.
+- Omit the table for trivial, single-file edits (e.g. typo); a one-line summary is enough.
+
+This rule works together with the **Test-Driven Development** rule: write tests first, then implementation, then give this technical summary so the user sees both what was built and how it fits into the codebase.

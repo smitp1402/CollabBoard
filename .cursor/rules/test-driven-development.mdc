@@ -1,0 +1,73 @@
+---
+description: Test-Driven Development (TDD) — write tests first, then implementation
+alwaysApply: true
+---
+
+# Test-Driven Development (TDD)
+
+TDD is the **primary method** for coding on this project. For every new behavior, write the test(s) first, see them fail, then implement until they pass. Do not add production code without a failing test that justifies it.
+
+## Red–Green–Refactor
+
+1. **Red**: Write a failing test that describes the desired behavior.
+2. **Green**: Write the minimum code to make the test pass.
+3. **Refactor**: Improve implementation and tests without changing behavior.
+
+## What to Test First, by Artifact Type
+
+### Frontend components (React/Next.js)
+
+- **Before** implementing a component: add a test file (e.g. `ComponentName.test.tsx`) that:
+  - Renders the component with required props.
+  - Asserts on visible text, roles, or data attributes.
+  - Covers key user interactions (click, type, submit) and resulting UI/state.
+- Then implement the component so the tests pass.
+
+```tsx
+// ✅ Test first (e.g. StickyNote.test.tsx)
+it('renders sticky note text and allows editing', () => {
+  render(<StickyNote text="Hello" x={0} y={0} />);
+  expect(screen.getByText('Hello')).toBeInTheDocument();
+  // ... interaction tests
+});
+// Then implement StickyNote.tsx
+```
+
+### API routes / endpoints
+
+- **Before** implementing a route handler: add a test that calls the endpoint (e.g. via `fetch`, supertest, or Next.js test helpers) and asserts on status, response body, and side effects (e.g. DB).
+- Then implement the route to satisfy the test.
+
+```ts
+// ✅ Test first: POST /api/boards returns 201 and creates board
+// Then implement the route handler
+```
+
+### Backend services / business logic
+
+- **Before** implementing a function or class: write unit tests for inputs, outputs, and error cases.
+- Then implement the function so all tests pass.
+
+### Hooks and utilities
+
+- **Before** implementing: write tests that call the hook (via `renderHook`) or utility with representative inputs and assert on return values or behavior.
+- Then implement the hook or utility.
+
+### Realtime / persistence behavior
+
+- For sync, presence, or persistence: write tests that describe the expected state or events (e.g. “after user A creates a note, user B’s client has that note in state”) and stub or mock the realtime layer as needed. Then implement to make those tests pass.
+
+## Conventions
+
+- **Colocate** test files next to the code they test: `ComponentName.tsx` + `ComponentName.test.tsx`, or `api/boards/route.ts` + `api/boards/route.test.ts`.
+- **Name tests** by behavior: “renders X when Y”, “returns 400 when payload is invalid”, “syncs new sticky note to other clients”.
+- **One logical behavior per test**; avoid large, multi-step tests that assert many unrelated things.
+- **Do not** commit new production code (component, endpoint, service, hook, utility) without at least one test that would have failed before the implementation.
+
+## When to Relax
+
+- **Spikes or exploration**: Time-box; add tests when the approach is chosen and you start real implementation.
+- **Third-party or generated code**: Focus tests on your usage and boundaries, not the library’s internals.
+- **Trivial glue** (e.g. re-export, config): Prefer one higher-level test that covers the integration path.
+
+If in doubt, default to writing the test first.
