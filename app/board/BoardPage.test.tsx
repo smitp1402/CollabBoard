@@ -2,7 +2,6 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import { BoardPageContent } from "./BoardPageContent";
 import { AuthProvider, type AuthContextValue } from "@/lib/auth/AuthContext";
-import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
 
 const mockPush = jest.fn();
 const mockUseBoardObjects = jest.fn();
@@ -78,7 +77,7 @@ describe("BoardPage", () => {
           signOut: jest.fn(),
         }}
       >
-        <BoardPageContent />
+        <BoardPageContent boardId="default" />
       </MockAuthProvider>
     );
 
@@ -98,7 +97,7 @@ describe("BoardPage", () => {
           signOut: jest.fn(),
         }}
       >
-        <BoardPageContent />
+        <BoardPageContent boardId="default" />
       </MockAuthProvider>
     );
 
@@ -120,14 +119,14 @@ describe("BoardPage", () => {
           signOut: jest.fn(),
         }}
       >
-        <BoardPageContent />
+        <BoardPageContent boardId="default" />
       </MockAuthProvider>
     );
 
     expect(screen.getByTestId("board-canvas")).toBeInTheDocument();
   });
 
-  it("uses single shared board (DEFAULT_BOARD_ID) when authenticated", () => {
+  it("uses boardId prop for useBoardObjects when authenticated", () => {
     const mockUser = { uid: "user-1", email: "test@example.com" } as any;
     render(
       <MockAuthProvider
@@ -140,10 +139,31 @@ describe("BoardPage", () => {
           signOut: jest.fn(),
         }}
       >
-        <BoardPageContent />
+        <BoardPageContent boardId="default" />
       </MockAuthProvider>
     );
 
-    expect(mockUseBoardObjects).toHaveBeenCalledWith(DEFAULT_BOARD_ID);
+    expect(mockUseBoardObjects).toHaveBeenCalledWith("default");
+  });
+
+  it("uses dynamic boardId for useBoardObjects", () => {
+    const mockUser = { uid: "user-1", email: "test@example.com" } as any;
+    mockUseBoardObjects.mockClear();
+    render(
+      <MockAuthProvider
+        value={{
+          user: mockUser,
+          loading: false,
+          signInWithGoogle: jest.fn(),
+          signInWithEmail: jest.fn(),
+          signUpWithEmail: jest.fn(),
+          signOut: jest.fn(),
+        }}
+      >
+        <BoardPageContent boardId="my-board-123" />
+      </MockAuthProvider>
+    );
+
+    expect(mockUseBoardObjects).toHaveBeenCalledWith("my-board-123");
   });
 });
