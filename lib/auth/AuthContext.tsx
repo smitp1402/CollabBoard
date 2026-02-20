@@ -56,7 +56,15 @@ export function AuthProvider({ children, value: overrideValue }: AuthProviderPro
     }
     if (!auth) return;
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: unknown) {
+      const code = (error as { code?: string })?.code;
+      if (code === "auth/popup-blocked" || code === "auth/popup-closed-by-user") {
+        return;
+      }
+      throw error;
+    }
   };
 
   const signInWithEmail = async (email: string, password: string) => {

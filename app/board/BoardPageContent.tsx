@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ref, remove } from "firebase/database";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { BoardCanvas } from "@/components/board/BoardCanvas";
 import { useBoardObjects } from "@/lib/board/useBoardObjects";
-import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
 import { getRealtimeDb } from "@/lib/firebase/client";
 import type { PresenceUser } from "@/lib/board/usePresence";
 
@@ -18,10 +18,12 @@ function getInitial(name: string): string {
   return trimmed.slice(0, 2).toUpperCase();
 }
 
-export function BoardPageContent() {
+type BoardPageContentProps = { boardId: string };
+
+export function BoardPageContent({ boardId }: BoardPageContentProps) {
   const router = useRouter();
   const { user, loading, signOut } = useAuth();
-  const { objects, setObjects, loading: boardLoading, error: boardError } = useBoardObjects(user ? DEFAULT_BOARD_ID : "");
+  const { objects, setObjects, loading: boardLoading, error: boardError } = useBoardObjects(user ? boardId : "");
   const [otherUsers, setOtherUsers] = useState<PresenceUser[]>([]);
   const [presenceError, setPresenceError] = useState<Error | null>(null);
   const [onlineOpen, setOnlineOpen] = useState(false);
@@ -44,15 +46,20 @@ export function BoardPageContent() {
   }, [onlineOpen]);
 
   if (loading) {
-    return <div className="loading_root">Loading…</div>;
+    return (
+      <div className="landing_loading">
+        <div className="landing_loading_dot" />
+        <span>Loading…</span>
+      </div>
+    );
   }
   if (!user) return null;
 
   const handleSignOut = async () => {
     const db = getRealtimeDb();
     if (db && user) {
-      const presenceRef = ref(db, `presence/${DEFAULT_BOARD_ID}/${user.uid}`);
-      const cursorRef = ref(db, `cursors/${DEFAULT_BOARD_ID}/${user.uid}`);
+      const presenceRef = ref(db, `presence/${boardId}/${user.uid}`);
+      const cursorRef = ref(db, `cursors/${boardId}/${user.uid}`);
       await Promise.all([remove(presenceRef), remove(cursorRef)]).catch(() => {});
     }
     await signOut();
@@ -62,18 +69,13 @@ export function BoardPageContent() {
   const displayName = user.displayName || user.email || "You";
 
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
-        minHeight: 0,
-      }}
-    >
-      <header className="board_header">
-        <span className="board_header_logo">ColabBoard</span>
-        <span className="board_header_title">Board</span>
-        <div className="board_header_spacer" />
+    <div className="app_shell" style={{ height: "100vh", minHeight: 0 }}>
+      <header className="app_header app_header_light">
+        <Link href="/" className="app_header_logo">
+          ColabBoard
+        </Link>
+        <span className="app_header_title">Board</span>
+        <div className="app_header_spacer" />
         {otherUsers.length > 0 && (
           <div className="board_header_online_wrap" ref={onlineRef}>
             <button
@@ -108,10 +110,10 @@ export function BoardPageContent() {
             )}
           </div>
         )}
-        <span className="board_header_user" title={displayName}>
+        <span className="app_header_user" title={displayName}>
           {displayName}
         </span>
-        <button type="button" className="btn_ghost" onClick={handleSignOut}>
+        <button type="button" className="app_btn_ghost" onClick={handleSignOut}>
           Sign out
         </button>
       </header>
@@ -125,21 +127,24 @@ export function BoardPageContent() {
         }}
       >
         {boardError && (
-          <div style={{ padding: "var(--space-2)", background: "#fef2f2", color: "#b91c1c", fontSize: "0.875rem" }}>
+          <div className="board_page_banner board_page_banner_error">
             Sync error: {boardError.message}. Check .env.local (NEXT_PUBLIC_FIREBASE_*), Firestore rules, and that Firestore is enabled in your Firebase project.
           </div>
         )}
         {presenceError && (
-          <div style={{ padding: "var(--space-2)", background: "#fef3c7", color: "#92400e", fontSize: "0.875rem" }}>
+          <div className="board_page_banner board_page_banner_warn">
             Can&apos;t load other users&apos; cursors. Check Realtime Database rules and connection.
           </div>
         )}
         {boardLoading ? (
-          <div className="loading_root">Loading board…</div>
+          <div className="landing_loading" style={{ flex: 1 }}>
+            <div className="landing_loading_dot" />
+            <span>Loading board…</span>
+          </div>
         ) : (
           <div style={{ flex: 1, minHeight: 0 }}>
             <BoardCanvas
-              boardId={DEFAULT_BOARD_ID}
+              boardId={boardId}
               user={user}
               objects={objects}
               onObjectsChange={setObjects}

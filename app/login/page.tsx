@@ -11,7 +11,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (loading) return;
     if (user) {
-      router.push("/board");
+      router.push("/");
     }
   }, [user, loading, router]);
 

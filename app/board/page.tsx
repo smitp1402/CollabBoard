@@ -1,5 +1,5 @@
-import { BoardPageContent } from "./BoardPageContent";
+import { redirect } from "next/navigation";
 
 export default function BoardPage() {
-  return <BoardPageContent />;
+  redirect("/");
 }
