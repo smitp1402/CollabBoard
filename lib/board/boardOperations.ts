@@ -1,4 +1,4 @@
-import type { BoardObject } from "@/lib/board-types";
+import type { BoardObject } from "@/types/board-types";
 
 const DUPLICATE_OFFSET = { x: 20, y: 20 };
 const PASTE_OFFSET = { x: 20, y: 20 };

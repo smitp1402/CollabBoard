@@ -31,7 +31,7 @@ The app subscribes to **parent** paths `presence/{boardId}` and `cursors/{boardI
 }
 ```
 
-- **Paths:** `presence/{boardId}/{userId}` and `cursors/{boardId}/{userId}` match [lib/board/usePresence.ts](../lib/board/usePresence.ts). Each board has its own presence and cursor subtree.
+- **Paths:** `presence/{boardId}/{userId}` and `cursors/{boardId}/{userId}` match [hooks/usePresence.ts](../hooks/usePresence.ts). Each board has its own presence and cursor subtree.
 - **Read:** `.read` on `presence/$boardId` and `cursors/$boardId` lets any signed-in user read the full list for that board.
 - **Write:** Only the user whose uid matches the path segment can write (own presence, own cursor).
 

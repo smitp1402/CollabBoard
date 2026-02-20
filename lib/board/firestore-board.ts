@@ -1,5 +1,5 @@
 import type { DocumentData, QuerySnapshot } from "firebase/firestore";
-import type { BoardObject } from "@/lib/board-types";
+import type { BoardObject } from "@/types/board-types";
 
 /** Firestore path for a board's objects collection */
 export function objectsCollectionPath(boardId: string): string {

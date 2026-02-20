@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProviderWrapper } from "@/components/AuthProviderWrapper";
+import { AuthProviderWrapper } from "@/components/auth/AuthProviderWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "ColabBoard",
   description: "Collaborative whiteboard with AI",
+  icons: { icon: "/favicon.ico" },
 };
 
 export default function RootLayout({

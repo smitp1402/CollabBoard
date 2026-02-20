@@ -9,7 +9,7 @@ import {
   type QuerySnapshot,
   type DocumentData,
 } from "firebase/firestore";
-import { DEFAULT_BOARD_ID } from "@/lib/board-constants";
+import { DEFAULT_BOARD_ID } from "@/constants/board";
 
 export type BoardMeta = {
   id: string;

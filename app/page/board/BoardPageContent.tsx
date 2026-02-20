@@ -1,0 +1,200 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ref, remove } from "firebase/database";
+import { useAuth } from "@/context/AuthContext";
+import { AIPanel } from "@/components/ai/AIPanel";
+import { BoardCanvas } from "@/components/canvas/BoardCanvas";
+import { PerformancePanel } from "@/components/canvas/PerformancePanel";
+import { useBoardObjects } from "@/hooks/useBoardObjects";
+import { getRealtimeDb } from "@/lib/firebase/client";
+import type { PresenceUser } from "@/hooks/usePresence";
+
+function getInitial(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase().slice(0, 2);
+  return trimmed.slice(0, 2).toUpperCase();
+}
+
+type BoardPageContentProps = { boardId: string };
+
+export function BoardPageContent({ boardId }: BoardPageContentProps) {
+  const router = useRouter();
+  const { user, loading, signOut } = useAuth();
+  const { objects, setObjects, loading: boardLoading, error: boardError, lastObjectSyncLatencyMs } = useBoardObjects(user ? boardId : "");
+  const [otherUsers, setOtherUsers] = useState<PresenceUser[]>([]);
+  const [presenceError, setPresenceError] = useState<Error | null>(null);
+  const [onlineOpen, setOnlineOpen] = useState(false);
+  const [perfPanelOpen, setPerfPanelOpen] = useState(false);
+  const [fps, setFps] = useState<number | null>(null);
+  const [cursorSyncLatencyMs, setCursorSyncLatencyMs] = useState<number | null>(null);
+  const onlineRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.push("/");
+    }
+  }, [user, loading, router]);
+
+  useEffect(() => {
+    if (!onlineOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (onlineRef.current && !onlineRef.current.contains(e.target as Node)) setOnlineOpen(false);
+    };
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [onlineOpen]);
+
+  if (loading) {
+    return (
+      <div className="landing_loading">
+        <div className="landing_loading_dot" />
+        <span>Loading…</span>
+      </div>
+    );
+  }
+  if (!user) return null;
+
+  const handleSignOut = async () => {
+    const db = getRealtimeDb();
+    if (db && user) {
+      const presenceRef = ref(db, `presence/${boardId}/${user.uid}`);
+      const cursorRef = ref(db, `cursors/${boardId}/${user.uid}`);
+      await Promise.all([remove(presenceRef), remove(cursorRef)]).catch(() => {});
+    }
+    await signOut();
+    router.push("/");
+  };
+
+  const displayName = user.displayName || user.email || "You";
+
+  return (
+    <div className="app_shell" style={{ height: "100vh", minHeight: 0 }}>
+      <header className="app_header app_header_light">
+        <Link href="/page/boards" className="app_header_logo">
+          ColabBoard
+        </Link>
+        <span className="app_header_title">Board</span>
+        <div className="app_header_spacer" />
+        <button
+          type="button"
+          className="app_btn_ghost"
+          onClick={() => setPerfPanelOpen((v) => !v)}
+          aria-expanded={perfPanelOpen}
+          aria-label="Toggle performance panel"
+        >
+          Performance
+        </button>
+        {otherUsers.length > 0 && (
+          <div className="board_header_online_wrap" ref={onlineRef}>
+            <button
+              type="button"
+              className="board_header_online_trigger"
+              onClick={() => setOnlineOpen((v) => !v)}
+              title={`${otherUsers.length} online`}
+              aria-expanded={onlineOpen}
+              aria-haspopup="true"
+            >
+              <span className="board_header_online_dot" aria-hidden />
+              <span className="board_header_online_count">{otherUsers.length} online</span>
+            </button>
+            {onlineOpen && (
+              <div className="board_header_online_dropdown" role="menu">
+                <div className="board_header_online_dropdown_title">Online on this board</div>
+                <ul className="board_header_online_list">
+                  {otherUsers.map((u) => (
+                    <li key={u.id} className="board_header_online_item" role="none">
+                      <span
+                        className="board_header_online_avatar"
+                        style={{ backgroundColor: u.color }}
+                        title={u.displayName}
+                      >
+                        {getInitial(u.displayName)}
+                      </span>
+                      <span className="board_header_online_name">{u.displayName}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <span className="app_header_user" title={displayName}>
+          {displayName}
+        </span>
+        <button type="button" className="app_btn_ghost" onClick={handleSignOut}>
+          Sign out
+        </button>
+      </header>
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          padding: 0,
+        }}
+      >
+        {boardError && (
+          <div className="board_page_banner board_page_banner_error">
+            Sync error: {boardError.message}. Check .env.local (NEXT_PUBLIC_FIREBASE_*), Firestore rules, and that Firestore is enabled in your Firebase project.
+          </div>
+        )}
+        {presenceError && (
+          <div className="board_page_banner board_page_banner_warn">
+            Can&apos;t load other users&apos; cursors. Check Realtime Database rules and connection.
+          </div>
+        )}
+        {boardLoading ? (
+          <div className="landing_loading" style={{ flex: 1 }}>
+            <div className="landing_loading_dot" />
+            <span>Loading board…</span>
+          </div>
+        ) : (
+          <>
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "row",
+              minHeight: 0,
+              minWidth: 0,
+            }}
+          >
+            <div className="board_canvas_wrap" style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative" }}>
+              <BoardCanvas
+                boardId={boardId}
+                user={user}
+                objects={objects}
+                onObjectsChange={setObjects}
+                onOtherUsersChange={setOtherUsers}
+                onPresenceError={setPresenceError}
+                onFPSReport={setFps}
+                onCursorSyncLatency={setCursorSyncLatencyMs}
+              />
+            </div>
+          </div>
+          <AIPanel boardId={boardId} />
+          {perfPanelOpen && (
+            <div className="perf-panel-wrap">
+              <PerformancePanel
+                fps={fps}
+                objectSyncLatencyMs={lastObjectSyncLatencyMs}
+                cursorSyncLatencyMs={cursorSyncLatencyMs}
+                objectCount={objects.length}
+                concurrentUsers={otherUsers.length}
+                onClose={() => setPerfPanelOpen(false)}
+              />
+            </div>
+          )}
+        </>
+        )}
+      </main>
+    </div>
+  );
+}

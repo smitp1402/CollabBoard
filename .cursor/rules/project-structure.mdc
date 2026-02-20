@@ -1,0 +1,97 @@
+---
+description: Enforce Next.js App Router folder structure and placement rules; no business logic in pages, no mixing UI and data access
+alwaysApply: true
+---
+
+# Project Structure Rules
+
+STRICTLY follow this folder structure.  
+Do NOT create random folders.  
+Do NOT place business logic inside pages.  
+Do NOT mix UI and data access logic.
+
+## PROJECT STRUCTURE RULES
+
+### app/
+- Contains routes, layouts, server components, route handlers
+- No business logic
+- Only orchestration and rendering
+
+### components/
+- Reusable UI components only
+- No data fetching
+- No direct database calls
+- If interactive → mark as `"use client"`
+
+### features/
+- Feature-specific UI + logic grouping
+- Each feature gets its own folder
+
+### context/
+- React Context providers only
+- Global state management
+
+### hooks/
+- Custom React hooks
+- Must start with `use`
+- No JSX here
+
+### lib/
+- Business logic
+- Service layer
+- API clients
+- Validators
+- Utility functions
+
+### db/ or repositories/
+- Database queries only
+- No UI code
+- No React
+
+### types/
+- Shared TypeScript types and interfaces
+
+### constants/
+- Static configuration and enums
+
+### utils/
+- Small reusable helper functions
+
+### public/
+- Static assets only
+
+## PLACEMENT RULES
+
+1. **Custom hook** → `/hooks`  
+   Example: `hooks/useAuth.ts`, `hooks/useDebounce.ts`
+
+2. **React Context** → `/context`  
+   Example: `context/AuthContext.tsx`, `context/ThemeProvider.tsx`
+
+3. **Reusable UI** → `/components`  
+   Example: `components/Button.tsx`, `components/Modal.tsx`
+
+4. **Feature-specific** → `/features/<feature-name>/`  
+   Example:
+   ```
+   features/chat/
+     ChatWindow.tsx
+     ChatService.ts
+     useChat.ts
+   ```
+
+5. **Business logic** → `/lib`  
+   Example: `lib/chat/pipeline.ts`, `lib/auth/authService.ts`
+
+6. **DB query** → `/db`  
+   Example: `db/userRepository.ts`, `db/messageRepository.ts`
+
+7. **API route** → `app/api/<route>/route.ts`
+
+8. **Never:**
+   - Put fetch calls inside components
+   - Put DB calls inside client components
+   - Put business logic inside `page.tsx`
+
+Always suggest the correct folder before generating code.  
+If unsure, ask where it belongs.

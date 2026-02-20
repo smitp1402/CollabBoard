@@ -26,8 +26,8 @@ Keep each file to 2–4 lines. Use clear, technical language (function names, pr
 | File | What it does | What changed |
 |------|----------------|--------------|
 | `lib/board/useBoardObjects.ts` | Hook that loads/saves board objects from Firestore and exposes `objects` / `setObjects`. | Included `color` in the update diff and in `updateDoc` payload so color changes are persisted. |
-| `components/board/BoardCanvas.tsx` | Renders the infinite canvas, grid, sticky/rect objects, toolbar, and presence cursors; handles place/drag/select and sticky text edit. | Added `STICKY_COLOR_PALETTE`, `updateObjectColor()`, color swatch UI when a sticky/rect is selected, and default `color` in `placeSticky` / `placeRectangle`. |
-| `components/board/BoardCanvas.test.tsx` | Unit tests for BoardCanvas (render, tools, selection, delete). | Extended Group mock so selection works; added tests for custom-color sticky, palette visibility when selected, and swatch click updating color via `onObjectsChange`. |
+| `components/canvas/BoardCanvas.tsx` | Renders the infinite canvas, grid, sticky/rect objects, toolbar, and presence cursors; handles place/drag/select and sticky text edit. | Added `STICKY_COLOR_PALETTE`, `updateObjectColor()`, color swatch UI when a sticky/rect is selected, and default `color` in `placeSticky` / `placeRectangle`. |
+| `components/canvas/BoardCanvas.test.tsx` | Unit tests for BoardCanvas (render, tools, selection, delete). | Extended Group mock so selection works; added tests for custom-color sticky, palette visibility when selected, and swatch click updating color via `onObjectsChange`. |
 
 ## When to Apply
 
