@@ -1,0 +1,62 @@
+---
+description: Enforce modular, secure, testable Next.js feature development standards
+alwaysApply: true
+---
+
+# Web Development Good Practices
+
+Apply these standards whenever adding or changing a feature.
+
+## Modularity And File Size
+
+- Keep files focused and modular; extract helpers/components/services instead of growing one file.
+- Target up to 250 lines per file. If a file grows beyond that, split by responsibility.
+- Separate UI, business logic, and data access.
+
+## Project Structure (Next.js App Router)
+
+- `app/`: routes, layouts, server actions, route handlers, orchestration only.
+- `components/`: reusable UI components (mostly client-side UI).
+- `lib/`: business logic, services, validators, helpers.
+- `db/` or `repositories/`: database queries and persistence logic.
+- `types/`: shared TypeScript types.
+- `public/`: static assets.
+- Pages/routes should orchestrate flows and avoid embedding heavy logic.
+
+## Server And Client Components
+
+- Default to Server Components.
+- Add `"use client"` only for state, effects, browser APIs, event handlers, and interactive UI.
+- Keep Client Components small and wrap them around server-rendered data when possible.
+
+## Data Fetching, APIs, And State
+
+- Fetch on the server when possible.
+- Use caching intentionally: `force-cache` (static), `no-store` (always fresh), `revalidate` (ISR).
+- Perform DB access only in server-only modules.
+- Use route handlers at `app/api/**/route.ts`.
+- Validate all inputs (Zod or equivalent).
+- Return consistent API JSON shape: `{ data, error }`.
+- Centralize error handling and logging.
+- Prefer local state for UI, URL state for filters/search, and server state as source of truth.
+- Use TanStack Query/SWR only when there is a clear need.
+
+## Performance And Security
+
+- Use `next/image` for images.
+- Use dynamic imports for heavy components.
+- Keep large libraries server-side where possible.
+- Add `loading.tsx` and Suspense boundaries where appropriate.
+- Never expose secrets to the client.
+- Use HttpOnly cookies for auth flows using cookies.
+- Add CSRF protection for cookie-based auth.
+- Validate and authorize all sensitive operations server-side.
+
+## Testing, Quality, And Deployment
+
+- Enforce ESLint, Prettier, and strict TypeScript.
+- Add/maintain unit tests for `lib/` logic and integration tests for APIs.
+- Keep CI running lint, typecheck, and tests.
+- Use environment variables per environment.
+- Add logging and error monitoring.
+- Use migrations and zero-downtime deployment practices.
