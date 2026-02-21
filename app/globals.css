@@ -710,6 +710,60 @@ a {
   color: var(--color-text-muted);
 }
 
+.ai-panel-suggestions-wrap {
+  margin-top: 0;
+}
+
+.ai-panel-suggestions-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--color-text-muted);
+  margin: 0 0 var(--space-1) 0;
+}
+
+.ai-panel-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.ai-panel-suggestion-item {
+  margin: 0;
+  padding: 0;
+}
+
+.ai-panel-suggestion-chip {
+  display: inline-block;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.75rem;
+  line-height: 1.25;
+  color: var(--color-text);
+  background: var(--color-bg-elevated, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.ai-panel-suggestion-chip:hover:not(:disabled) {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.1));
+  border-color: var(--color-text-muted);
+}
+
+.ai-panel-suggestion-chip:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .ai-panel-submit {
   width: 100%;
 }

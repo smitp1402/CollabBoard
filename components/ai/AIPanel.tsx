@@ -18,6 +18,22 @@ import type { AICommandResponse } from "@/types/ai-types";
 const MAX_HISTORY = 10;
 const API_PATH = "/api/ai/commands";
 
+/** Shortcut suggestions shown in the chat panel (label = chip text, prompt = text inserted on click). */
+const AI_SUGGESTION_COMMANDS: { label: string; prompt: string }[] = [
+  { label: "Yellow sticky 'User Research'", prompt: "Add a yellow sticky note that says 'User Research'" },
+  { label: "Blue rectangle at 100, 200", prompt: "Create a blue rectangle at position 100, 200" },
+  { label: "Frame 'Sprint Planning'", prompt: "Add a frame called 'Sprint Planning'" },
+  { label: "Move pink stickies right", prompt: "Move all the pink sticky notes to the right side" },
+  { label: "Resize frame to fit", prompt: "Resize the frame to fit its contents" },
+  { label: "Sticky color to green", prompt: "Change the sticky note color to green" },
+  { label: "Arrange in a grid", prompt: "Arrange these sticky notes in a grid" },
+  { label: "2×3 grid pros and cons", prompt: "Create a 2x3 grid of sticky notes for pros and cons" },
+  { label: "Space evenly", prompt: "Space these elements evenly" },
+  { label: "SWOT template", prompt: "Create a SWOT analysis template with four quadrants" },
+  { label: "User journey 5 stages", prompt: "Build a user journey map with 5 stages" },
+  { label: "Retro board", prompt: "Set up a retrospective board with What Went Well, What Didn't, and Action Items columns" },
+];
+
 /** UI-only status; maps from API status and network state. */
 export type AICommandStatus = "idle" | "running" | "completed" | "failed";
 
@@ -285,6 +301,24 @@ export function AIPanel({ boardId, className }: AIPanelProps) {
               <span id="ai-panel-input-hint" className="visually-hidden">
                 Type a natural language command and click Run.
               </span>
+            </div>
+
+            <div className="ai-panel-section ai-panel-suggestions-wrap">
+              <h3 className="ai-panel-suggestions-title">Suggestions</h3>
+              <ul className="ai-panel-suggestions" aria-label="Shortcut command suggestions">
+                {AI_SUGGESTION_COMMANDS.map((item, i) => (
+                  <li key={i} className="ai-panel-suggestion-item">
+                    <button
+                      type="button"
+                      className="ai-panel-suggestion-chip"
+                      onClick={() => setPrompt(item.prompt)}
+                      disabled={loading}
+                    >
+                      {item.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="ai-panel-section">

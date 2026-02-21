@@ -34,6 +34,16 @@ jest.mock("@/lib/ai/agentRunner", () => ({
   runAgentCommand: (...args: unknown[]) => mockRunAgentCommand(...args),
 }));
 
+const mockCheckRateLimit = jest.fn();
+const mockGetPerUserLimit = jest.fn();
+const mockGetPerBoardLimit = jest.fn();
+jest.mock("@/lib/rateLimit", () => ({
+  checkRateLimit: (...args: unknown[]) => mockCheckRateLimit(...args),
+  getPerUserLimit: () => mockGetPerUserLimit(),
+  getPerBoardLimit: () => mockGetPerBoardLimit(),
+  rateLimitKey: (type: string, id: string) => `ai:${type}:${id}`,
+}));
+
 function jsonResponse(body: unknown) {
   return new Request("http://localhost/api/ai/commands", {
     method: "POST",
@@ -59,9 +69,12 @@ const validBody = {
   clientRequestId: "req-1",
 };
 
+const originalEnv = process.env;
+
 describe("POST /api/ai/commands", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env = { ...originalEnv };
     mockVerifyIdToken.mockResolvedValue({ uid: "test-uid" });
     mockDocGet.mockResolvedValue({ exists: true });
     mockBuildCommandId.mockReturnValue("cmd-1");
@@ -73,6 +86,13 @@ describe("POST /api/ai/commands", () => {
       summary: "Executed 1 tool call(s).",
       executed: 1,
     });
+    mockCheckRateLimit.mockReturnValue({ allowed: true });
+    mockGetPerUserLimit.mockReturnValue(30);
+    mockGetPerBoardLimit.mockReturnValue(60);
+  });
+
+  afterAll(() => {
+    process.env = originalEnv;
   });
 
   it("returns 401 when Authorization header is missing", async () => {
@@ -202,5 +222,41 @@ describe("POST /api/ai/commands", () => {
         error: "Unknown tool",
       })
     );
+  });
+
+  it("returns 503 when AI_AGENT_ENABLED is false", async () => {
+    process.env.AI_AGENT_ENABLED = "false";
+    const res = await POST(authRequest(validBody, "valid-token"));
+    expect(res.status).toBe(503);
+    const data = await res.json();
+    expect(data.error?.code).toBe("FEATURE_DISABLED");
+    expect(data.error?.message).toMatch(/disabled/i);
+    expect(mockVerifyIdToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 503 when AI_AGENT_ENABLED is 0", async () => {
+    process.env.AI_AGENT_ENABLED = "0";
+    const res = await POST(authRequest(validBody, "valid-token"));
+    expect(res.status).toBe(503);
+    expect(mockVerifyIdToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 with Retry-After when per-user rate limit exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 45 });
+    const res = await POST(authRequest(validBody, "valid-token"));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("45");
+    const data = await res.json();
+    expect(data.error?.code).toBe("RATE_LIMITED");
+    expect(mockCreateRunningCommand).not.toHaveBeenCalled();
+  });
+
+  it("returns 429 when per-board rate limit exceeded", async () => {
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: true });
+    mockCheckRateLimit.mockReturnValueOnce({ allowed: false, retryAfterSeconds: 30 });
+    const res = await POST(authRequest(validBody, "valid-token"));
+    expect(res.status).toBe(429);
+    expect(res.headers.get("Retry-After")).toBe("30");
+    expect(mockCreateRunningCommand).not.toHaveBeenCalled();
   });
 });

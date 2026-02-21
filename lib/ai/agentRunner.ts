@@ -50,7 +50,10 @@ function getOpenAIClient(): OpenAIChatLike {
 }
 
 type OpenAIToolParamSchema = {
-  properties: Record<string, { type: string; description?: string }>;
+  properties: Record<
+    string,
+    { type: string; description?: string; items?: { type: string } }
+  >;
   required?: string[];
 };
 
@@ -128,11 +131,71 @@ const OPENAI_TOOL_PARAMETERS: Record<string, OpenAIToolParamSchema> = {
     properties: {},
     required: [],
   },
+  createSWOTTemplate: {
+    properties: {
+      originX: { type: "number", description: "Top-left X of the SWOT area" },
+      originY: { type: "number", description: "Top-left Y of the SWOT area" },
+      quadrantWidth: { type: "number", description: "Optional width per quadrant" },
+      quadrantHeight: { type: "number", description: "Optional height per quadrant" },
+    },
+    required: ["originX", "originY"],
+  },
+  createUserJourneyTemplate: {
+    properties: {
+      originX: { type: "number", description: "Left X of the journey" },
+      originY: { type: "number", description: "Top Y of the journey" },
+      stageCount: { type: "number", description: "Number of stages (default 5)" },
+    },
+    required: ["originX", "originY"],
+  },
+  createRetroTemplate: {
+    properties: {
+      originX: { type: "number", description: "Left X of the retro board" },
+      originY: { type: "number", description: "Top Y of the retro board" },
+    },
+    required: ["originX", "originY"],
+  },
+  arrangeInGrid: {
+    properties: {
+      objectIds: {
+        type: "array",
+        items: { type: "string" },
+        description: "Array of object IDs to arrange",
+      },
+      originX: { type: "number", description: "Grid top-left X" },
+      originY: { type: "number", description: "Grid top-left Y" },
+      columns: { type: "number", description: "Number of columns" },
+      gapX: { type: "number", description: "Horizontal gap between items" },
+      gapY: { type: "number", description: "Vertical gap between items" },
+    },
+    required: ["objectIds"],
+  },
+  distributeEvenly: {
+    properties: {
+      objectIds: {
+        type: "array",
+        items: { type: "string" },
+        description: "Array of object IDs to distribute",
+      },
+      direction: { type: "string", description: "horizontal or vertical" },
+    },
+    required: ["objectIds", "direction"],
+  },
 };
 
 const TOOL_DESCRIPTIONS: Record<string, string> = {
   createStickyNote:
     "Add a sticky note to the board. If the user does not specify content, use 'New note' or a brief phrase from their message; if they do not specify position, use (100, 100) or place near existing objects. Prefer using defaults over asking the user.",
+  createSWOTTemplate:
+    "Create a SWOT analysis template with four quadrants (Strengths, Weaknesses, Opportunities, Threats) at the given origin. Use when the user asks for a SWOT template or four-quadrant analysis.",
+  createUserJourneyTemplate:
+    "Create a user journey template with multiple stages (default 5) in a row. Use when the user asks for a user journey, journey map, or stage template.",
+  createRetroTemplate:
+    "Create a retrospective template with three columns: Went well, To improve, Action items. Use when the user asks for a retro, retrospective, or start/stop/continue board.",
+  arrangeInGrid:
+    "Arrange the given objects in a grid layout. Use when the user asks to arrange, grid, or align items in a grid. Object IDs must exist on the board.",
+  distributeEvenly:
+    "Distribute the given objects evenly in a horizontal or vertical line. Use when the user asks to space evenly, distribute, or align with equal spacing. Requires at least 2 objects.",
 };
 
 function buildOpenAITools(): Array<Record<string, unknown>> {
@@ -191,6 +254,28 @@ export async function runAgentCommand(input: AgentRunnerInput): Promise<AgentRun
   const messages: Array<Record<string, unknown>> = initialMessages;
   const tools = buildOpenAITools();
   let executed = 0;
+  const steps: string[] = [];
+
+  function describeStep(tool: string, args: Record<string, unknown>): string {
+    if (tool === "createStickyNote") return `Created sticky note "${String(args.text ?? "").slice(0, 30)}"`;
+    if (tool === "createShape") return `Created ${String(args.type ?? "shape")}`;
+    if (tool === "createFrame") return `Created frame "${String(args.title ?? "").slice(0, 30)}"`;
+    if (tool === "createConnector") return "Created connector";
+    if (tool === "moveObject") return "Moved object";
+    if (tool === "resizeObject") return "Resized object";
+    if (tool === "updateText") return "Updated text";
+    if (tool === "changeColor") return "Changed color";
+    if (tool === "createSWOTTemplate") return "Created SWOT template";
+    if (tool === "createUserJourneyTemplate") return "Created user journey template";
+    if (tool === "createRetroTemplate") return "Created retro template";
+    if (tool === "arrangeInGrid") {
+      const ids = Array.isArray(args.objectIds) ? args.objectIds.length : 0;
+      return `Arranged ${ids} object(s) in grid`;
+    }
+    if (tool === "distributeEvenly") return `Distributed evenly (${String(args.direction ?? "")})`;
+    if (tool === "getBoardState") return "Read board state";
+    return tool;
+  }
 
   for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration += 1) {
     const completion = await client.chat.completions.create({
@@ -203,9 +288,12 @@ export async function runAgentCommand(input: AgentRunnerInput): Promise<AgentRun
     const toolCalls = message?.tool_calls ?? [];
 
     if (toolCalls.length === 0) {
+      const summary =
+        message?.content?.trim() ||
+        (steps.length > 0 ? steps.join("; ") : `Executed ${executed} tool call(s).`);
       return {
         status: "completed",
-        summary: message?.content ?? `Executed ${executed} tool call(s).`,
+        summary,
         executed,
       };
     }
@@ -258,6 +346,7 @@ export async function runAgentCommand(input: AgentRunnerInput): Promise<AgentRun
         };
       }
       executed += 1;
+      steps.push(describeStep(name, validated.data));
       const toolCallId = toolCall.id ?? `call_${executed}`;
       toolResults.push({
         toolCallId,

@@ -76,6 +76,20 @@ describe("AIPanel", () => {
     expect(submitButton).toBeDisabled();
   });
 
+  it("renders shortcut suggestions and clicking one fills the prompt", async () => {
+    const user = userEvent.setup();
+    render(<AIPanel boardId="board-1" />);
+
+    expect(screen.getByRole("list", { name: /shortcut command suggestions/i })).toBeInTheDocument();
+    expect(screen.getByText("Suggestions")).toBeInTheDocument();
+    const chip = screen.getByRole("button", { name: /yellow sticky 'user research'/i });
+    expect(chip).toBeInTheDocument();
+
+    await user.click(chip);
+    const textarea = screen.getByPlaceholderText(/Ask AI to add sticky notes/i);
+    expect(textarea).toHaveValue("Add a yellow sticky note that says 'User Research'");
+  });
+
   it("sends POST to /api/ai/commands with boardId, prompt, clientRequestId and Bearer token, and displays commandId and summary on success", async () => {
     const user = userEvent.setup();
     render(<AIPanel boardId="board-1" />);

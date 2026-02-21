@@ -12,7 +12,7 @@ type DocRefLike = {
   update: (data: Record<string, unknown>) => Promise<unknown>;
 };
 
-type FirestoreLike = {
+export type FirestoreLike = {
   doc: (path: string) => DocRefLike;
 };
 

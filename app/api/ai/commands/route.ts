@@ -6,7 +6,14 @@ import {
   createRunningCommand,
   finalizeCommand,
   getPersistedCommand,
+  type FirestoreLike,
 } from "@/lib/ai/commandStore";
+import {
+  checkRateLimit,
+  getPerUserLimit,
+  getPerBoardLimit,
+  rateLimitKey,
+} from "@/lib/rateLimit";
 import {
   aiCommandRequestSchema,
   type AICommandResponse,
@@ -19,7 +26,42 @@ function getBearerToken(request: Request): string | null {
   return auth.slice(7).trim() || null;
 }
 
+/** Structured log for observability: commandId, boardId, actor, latencyMs, status, failureReason */
+function logCommand(params: {
+  commandId: string;
+  boardId: string;
+  actor: string;
+  latencyMs: number;
+  status: "completed" | "failed";
+  failureReason?: string;
+}) {
+  const payload = {
+    event: "ai_command",
+    commandId: params.commandId,
+    boardId: params.boardId,
+    actor: params.actor,
+    latencyMs: params.latencyMs,
+    status: params.status,
+    ...(params.failureReason && { failureReason: params.failureReason }),
+  };
+  console.info(JSON.stringify(payload));
+}
+
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+
+  if (process.env.AI_AGENT_ENABLED === "false" || process.env.AI_AGENT_ENABLED === "0") {
+    return NextResponse.json(
+      {
+        error: {
+          message: "AI commands are temporarily disabled.",
+          code: "FEATURE_DISABLED",
+        },
+      },
+      { status: 503 }
+    );
+  }
+
   const token = getBearerToken(request);
   if (!token) {
     return NextResponse.json(
@@ -61,13 +103,45 @@ export async function POST(request: Request) {
 
   const { boardId, prompt, clientRequestId } = parsed.data;
   const idempotencyKey = parsed.data.idempotencyKey ?? clientRequestId;
-  const db = getAdminFirestore();
-  const boardRef = db.doc(`boards/${boardId}`);
+  const adminDb = getAdminFirestore();
+  const db = adminDb as unknown as FirestoreLike;
+  const boardRef = adminDb.doc(`boards/${boardId}`);
   const boardSnap = await boardRef.get();
   if (!boardSnap.exists) {
     return NextResponse.json(
       { error: { message: "Board not found or access denied.", code: "FORBIDDEN" } },
       { status: 403 }
+    );
+  }
+
+  const userLimit = checkRateLimit(rateLimitKey("user", uid), {
+    windowMs: 60_000,
+    maxRequests: getPerUserLimit(),
+  });
+  if (!userLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: {
+          message: "Too many AI commands. Please try again later.",
+          code: "RATE_LIMITED",
+        },
+      },
+      { status: 429, headers: { "Retry-After": String(userLimit.retryAfterSeconds) } }
+    );
+  }
+  const boardLimit = checkRateLimit(rateLimitKey("board", boardId), {
+    windowMs: 60_000,
+    maxRequests: getPerBoardLimit(),
+  });
+  if (!boardLimit.allowed) {
+    return NextResponse.json(
+      {
+        error: {
+          message: "Too many AI commands on this board. Please try again later.",
+          code: "RATE_LIMITED",
+        },
+      },
+      { status: 429, headers: { "Retry-After": String(boardLimit.retryAfterSeconds) } }
     );
   }
 
@@ -79,6 +153,14 @@ export async function POST(request: Request) {
   });
   const existing = await getPersistedCommand(db, boardId, commandId);
   if (existing) {
+    logCommand({
+      commandId,
+      boardId,
+      actor: uid,
+      latencyMs: Date.now() - startedAt,
+      status: existing.status === "completed" ? "completed" : "failed",
+      ...(existing.status === "failed" && existing.error && { failureReason: existing.error }),
+    });
     return NextResponse.json(
       {
         data: {
@@ -113,6 +195,14 @@ export async function POST(request: Request) {
         summary: result.summary,
         error: result.error,
       });
+      logCommand({
+        commandId,
+        boardId,
+        actor: uid,
+        latencyMs: Date.now() - startedAt,
+        status: "failed",
+        failureReason: result.error,
+      });
       return NextResponse.json(
         {
           data: {
@@ -134,6 +224,13 @@ export async function POST(request: Request) {
       status: "completed",
       summary: result.summary,
     });
+    logCommand({
+      commandId,
+      boardId,
+      actor: uid,
+      latencyMs: Date.now() - startedAt,
+      status: "completed",
+    });
     return NextResponse.json(
       {
         data: {
@@ -152,6 +249,14 @@ export async function POST(request: Request) {
       status: "failed",
       summary: "Failed to execute AI command.",
       error: message,
+    });
+    logCommand({
+      commandId,
+      boardId,
+      actor: uid,
+      latencyMs: Date.now() - startedAt,
+      status: "failed",
+      failureReason: message,
     });
     return NextResponse.json(
       {

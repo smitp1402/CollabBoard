@@ -93,6 +93,45 @@ describe("agentRunner", () => {
     });
   });
 
+  it("uses step list as summary when LLM returns no content", async () => {
+    const create = jest
+      .fn()
+      .mockResolvedValueOnce({
+        choices: [
+          {
+            message: {
+              tool_calls: [
+                {
+                  function: {
+                    name: "createStickyNote",
+                    arguments: JSON.stringify({ text: "Note", x: 0, y: 0 }),
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        choices: [{ message: { content: null } }],
+      });
+
+    const executeToolCallFn = jest
+      .fn()
+      .mockResolvedValue({ success: true, data: { executed: 1, createdObjectIds: [] } });
+
+    const result = await runAgentCommand({
+      boardId: "board-1",
+      prompt: "Add a note",
+      openaiClient: { chat: { completions: { create } } },
+      getBoardStateFn: async () => [],
+      executeToolCallFn,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.summary).toMatch(/Created sticky note/);
+  });
+
   it("rejects unknown tool calls and returns failed status", async () => {
     const create = jest.fn().mockResolvedValue({
       choices: [

@@ -126,6 +126,40 @@ export const changeColorSchema = z.object({
 
 export const getBoardStateSchema = z.object({});
 
+// --- Template tools ---
+export const createSWOTTemplateSchema = z.object({
+  originX: z.number(),
+  originY: z.number(),
+  quadrantWidth: z.number().optional(),
+  quadrantHeight: z.number().optional(),
+});
+
+export const createUserJourneyTemplateSchema = z.object({
+  originX: z.number(),
+  originY: z.number(),
+  stageCount: z.number().min(1).max(10).optional(),
+});
+
+export const createRetroTemplateSchema = z.object({
+  originX: z.number(),
+  originY: z.number(),
+});
+
+// --- Layout tools ---
+export const arrangeInGridSchema = z.object({
+  objectIds: z.array(z.string()).min(1, "At least one objectId required"),
+  originX: z.number().optional(),
+  originY: z.number().optional(),
+  columns: z.number().int().min(1).optional(),
+  gapX: z.number().min(0).optional(),
+  gapY: z.number().min(0).optional(),
+});
+
+export const distributeEvenlySchema = z.object({
+  objectIds: z.array(z.string()).min(1, "At least one objectId required"),
+  direction: z.enum(["horizontal", "vertical"]),
+});
+
 /** Map tool name -> Zod schema for argument validation (used in later phases). */
 export const toolSchemas: Record<string, z.ZodType<Record<string, unknown>>> = {
   createStickyNote: createStickyNoteSchema,
@@ -137,4 +171,9 @@ export const toolSchemas: Record<string, z.ZodType<Record<string, unknown>>> = {
   updateText: updateTextSchema,
   changeColor: changeColorSchema,
   getBoardState: getBoardStateSchema,
+  createSWOTTemplate: createSWOTTemplateSchema,
+  createUserJourneyTemplate: createUserJourneyTemplateSchema,
+  createRetroTemplate: createRetroTemplateSchema,
+  arrangeInGrid: arrangeInGridSchema,
+  distributeEvenly: distributeEvenlySchema,
 };

@@ -113,4 +113,105 @@ describe("executeToolCalls", () => {
     expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
     expect(mockBatchCommit).toHaveBeenCalledTimes(1);
   });
+
+  it("createSWOTTemplate creates 4 frames and 4 stickies and commits", async () => {
+    const calls = [
+      { tool: "createSWOTTemplate", args: { originX: 0, originY: 0 } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(true);
+    expect(mockBatchSet).toHaveBeenCalledTimes(8);
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+    if (result.success) expect(result.data.createdObjectIds.length).toBe(8);
+  });
+
+  it("createUserJourneyTemplate creates 5 stages", async () => {
+    const calls = [
+      { tool: "createUserJourneyTemplate", args: { originX: 0, originY: 0, stageCount: 5 } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(true);
+    expect(mockBatchSet).toHaveBeenCalledTimes(5);
+    if (result.success) expect(result.data.createdObjectIds.length).toBe(5);
+  });
+
+  it("createRetroTemplate creates 3 columns with frames and stickies", async () => {
+    const calls = [
+      { tool: "createRetroTemplate", args: { originX: 0, originY: 0 } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(true);
+    expect(mockBatchSet).toHaveBeenCalledTimes(6);
+    if (result.success) expect(result.data.createdObjectIds.length).toBe(6);
+  });
+
+  it("arrangeInGrid updates positions for given object IDs", async () => {
+    const objs: BoardObject[] = [
+      { id: "a", type: "sticky", x: 0, y: 0, width: 100, height: 80, text: "A", color: "#fff" },
+      { id: "b", type: "sticky", x: 10, y: 10, width: 100, height: 80, text: "B", color: "#fff" },
+    ];
+    mockGetBoardState.mockResolvedValueOnce(objs);
+
+    const calls = [
+      { tool: "arrangeInGrid", args: { objectIds: ["a", "b"], originX: 0, originY: 0, columns: 2 } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(true);
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
+
+  it("arrangeInGrid returns validation error when object not found", async () => {
+    mockGetBoardState.mockResolvedValueOnce([]);
+
+    const calls = [
+      { tool: "arrangeInGrid", args: { objectIds: ["missing"], originX: 0, originY: 0 } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.message).toMatch(/not found/i);
+  });
+
+  it("distributeEvenly returns validation error for fewer than 2 objects", async () => {
+    mockGetBoardState.mockResolvedValueOnce([
+      { id: "a", type: "sticky", x: 0, y: 0, width: 100, height: 80, text: "A", color: "#fff" },
+    ]);
+
+    const calls = [
+      { tool: "distributeEvenly", args: { objectIds: ["a"], direction: "horizontal" } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.message).toMatch(/at least 2/i);
+  });
+
+  it("distributeEvenly updates positions for 2 objects horizontally", async () => {
+    const objs: BoardObject[] = [
+      { id: "a", type: "sticky", x: 0, y: 0, width: 100, height: 80, text: "A", color: "#fff" },
+      { id: "b", type: "sticky", x: 200, y: 0, width: 100, height: 80, text: "B", color: "#fff" },
+    ];
+    mockGetBoardState.mockResolvedValueOnce(objs);
+
+    const calls = [
+      { tool: "distributeEvenly", args: { objectIds: ["a", "b"], direction: "horizontal" } },
+    ] as AIToolCall[];
+
+    const result = await executeToolCalls("board-1", calls);
+
+    expect(result.success).toBe(true);
+    expect(mockBatchUpdate).toHaveBeenCalledTimes(2);
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+  });
 });
