@@ -38,7 +38,22 @@ env:
       - RUNTIME
 
   - variable: NEXT_PUBLIC_FIREBASE_DATABASE_URL
-    value: "https://colabboard-57f6f-default-rtdb.firebaseio.com"
+    value: "https://colabboard-57f6f-default-rtdb.firebaseio.com/"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # Server-side: set these in Firebase Console → App Hosting → your app → Environment variables (secrets)
+  # Do not commit real values: FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, OPENAI_API_KEY
+
+  - variable: OPENAI_MODEL
+    value: "gpt-4o-mini"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  - variable: AI_AGENT_ENABLED
+    value: "true"
     availability:
       - BUILD
       - RUNTIME
