@@ -1,19 +1,31 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { getDb } from "@/lib/firebase/client";
+import {
+  collection,
+  doc,
+  limit,
+  onSnapshot,
+  orderBy,
+  query,
+  type DocumentData,
+  type QuerySnapshot,
+} from "firebase/firestore";
+import type { AICommandResponse } from "@/types/ai-types";
 
-const MOCK_DELAY_MS = 1200;
-const MOCK_FAIL_RATE = 0.2;
 const MAX_HISTORY = 10;
-const MOCK_SUCCESS_MESSAGE = "Command completed.";
-const MOCK_ERROR_MESSAGE = "Something went wrong (mock).";
+const API_PATH = "/api/ai/commands";
 
+/** UI-only status; maps from API status and network state. */
 export type AICommandStatus = "idle" | "running" | "completed" | "failed";
 
 export type HistoryEntry = {
   prompt: string;
   status: AICommandStatus;
   summary: string;
+  commandId?: string;
   timestamp: number;
 };
 
@@ -23,6 +35,7 @@ export type AIPanelProps = {
 };
 
 export function AIPanel({ boardId, className }: AIPanelProps) {
+  const { user } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<AICommandStatus>("idle");
@@ -30,48 +43,164 @@ export function AIPanel({ boardId, className }: AIPanelProps) {
   const [lastError, setLastError] = useState("");
   const [lastSubmittedPrompt, setLastSubmittedPrompt] = useState("");
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  const runMock = useCallback(
-    (inputPrompt: string) => {
-      setLastSubmittedPrompt(inputPrompt);
-      setStatus("running");
-      setLoading(true);
-      setLastResponse("");
-      setLastError("");
+  const mapApiStatusToUi = useCallback((apiStatus?: string): AICommandStatus => {
+    if (apiStatus === "pending") return "running";
+    if (apiStatus === "error") return "failed";
+    if (apiStatus === "success") return "completed";
+    return "completed";
+  }, []);
 
-      setTimeout(() => {
-        const failed = Math.random() < MOCK_FAIL_RATE;
-        const newStatus: AICommandStatus = failed ? "failed" : "completed";
+  const mapCommandStatusToUi = useCallback((commandStatus?: string): AICommandStatus => {
+    if (commandStatus === "running") return "running";
+    if (commandStatus === "failed") return "failed";
+    if (commandStatus === "completed") return "completed";
+    return "idle";
+  }, []);
 
-        setStatus(newStatus);
-        if (failed) {
-          setLastError(MOCK_ERROR_MESSAGE);
-        } else {
-          setLastResponse(MOCK_SUCCESS_MESSAGE);
-        }
+  const pushHistoryFallback = useCallback((entry: HistoryEntry) => {
+    setHistory((prev) => [entry, ...prev].slice(0, MAX_HISTORY));
+  }, []);
+
+  useEffect(() => {
+    const db = getDb();
+    if (!db || !boardId) return;
+    const q = query(
+      collection(db, "boards", boardId, "ai_commands"),
+      orderBy("createdAt", "desc"),
+      limit(MAX_HISTORY)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot: QuerySnapshot<DocumentData>) => {
+      const mapped: HistoryEntry[] = snapshot.docs.map((item) => {
+        const data = item.data();
+        return {
+          prompt: String(data.prompt ?? ""),
+          status: mapCommandStatusToUi(String(data.status ?? "")),
+          summary: String(data.summary ?? ""),
+          commandId: item.id,
+          timestamp: Date.now(),
+        };
+      });
+      setHistory(mapped);
+    });
+    return () => unsubscribe();
+  }, [boardId, mapCommandStatusToUi]);
+
+  useEffect(() => {
+    const db = getDb();
+    if (!db || !boardId || !activeCommandId) return;
+    const commandRef = doc(db, "boards", boardId, "ai_commands", activeCommandId);
+    const unsubscribe = onSnapshot(commandRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const data = snapshot.data();
+      const nextStatus = mapCommandStatusToUi(String(data?.status ?? ""));
+      setStatus(nextStatus);
+      if (nextStatus === "completed") {
+        setLastResponse(String(data?.summary ?? "Done."));
+        setLastError("");
         setLoading(false);
+      } else if (nextStatus === "failed") {
+        const err = String(data?.error ?? data?.summary ?? "Request failed.");
+        setLastError(err);
+        setLastResponse("");
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, [activeCommandId, boardId, mapCommandStatusToUi]);
 
-        setHistory((prev) => {
-          const entry: HistoryEntry = {
-            prompt: inputPrompt,
-            status: newStatus,
-            summary: failed ? MOCK_ERROR_MESSAGE : MOCK_SUCCESS_MESSAGE,
-            timestamp: Date.now(),
-          };
-          return [entry, ...prev].slice(0, MAX_HISTORY);
+  const submitToApi = useCallback(
+    async (inputPrompt: string) => {
+      if (!user) {
+        setLastError("You must be signed in to run commands.");
+        setStatus("failed");
+        setLoading(false);
+        return;
+      }
+      let token: string;
+      try {
+        token = await user.getIdToken();
+      } catch {
+        setLastError("Failed to get auth token.");
+        setStatus("failed");
+        setLoading(false);
+        return;
+      }
+      const body = {
+        boardId,
+        prompt: inputPrompt,
+        clientRequestId: crypto.randomUUID(),
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const res = await fetch(API_PATH, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json().catch(() => ({}))) as AICommandResponse;
+
+      if (!res.ok) {
+        const message =
+          json.error?.message ?? `Request failed (${res.status}).`;
+        setLastError(message);
+        setStatus("failed");
+        setLoading(false);
+        pushHistoryFallback({
+          prompt: inputPrompt,
+          status: "failed",
+          summary: message,
+          timestamp: Date.now(),
         });
-      }, MOCK_DELAY_MS);
+        return;
+      }
+
+      const data = json.data;
+      const summary = data?.summary ?? "Done.";
+      const commandId = data?.commandId;
+      const apiStatus = data?.status;
+      if (commandId) {
+        setActiveCommandId(commandId);
+      }
+      setStatus(mapApiStatusToUi(apiStatus));
+      if (apiStatus === "error") {
+        setLastError(json.error?.message ?? summary);
+        setLastResponse("");
+      } else {
+        const displaySummary = commandId != null ? `${summary} (${commandId})` : summary;
+        setLastResponse(displaySummary);
+        setLastError("");
+      }
+      setLoading(false);
+      if (!getDb()) {
+        pushHistoryFallback({
+          prompt: inputPrompt,
+          status: mapApiStatusToUi(apiStatus),
+          summary: summary,
+          commandId,
+          timestamp: Date.now(),
+        });
+      }
     },
-    []
+    [boardId, mapApiStatusToUi, pushHistoryFallback, user]
   );
 
   const handleSubmit = useCallback(() => {
     const trimmed = prompt.trim();
     if (!trimmed || loading) return;
-    runMock(trimmed);
+    setLastSubmittedPrompt(trimmed);
+    setStatus("running");
+    setLoading(true);
+    setLastResponse("");
+    setLastError("");
     setPrompt("");
-  }, [prompt, loading, runMock]);
+    submitToApi(trimmed);
+  }, [prompt, loading, submitToApi]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -79,18 +208,26 @@ export function AIPanel({ boardId, className }: AIPanelProps) {
         e.preventDefault();
         const trimmed = prompt.trim();
         if (trimmed && !loading) {
-          runMock(trimmed);
+          setLastSubmittedPrompt(trimmed);
+          setStatus("running");
+          setLoading(true);
+          setLastResponse("");
+          setLastError("");
           setPrompt("");
+          submitToApi(trimmed);
         }
       }
     },
-    [prompt, loading, runMock]
+    [prompt, loading, submitToApi]
   );
 
   const handleRetry = useCallback(() => {
     if (status !== "failed" || !lastSubmittedPrompt || loading) return;
-    runMock(lastSubmittedPrompt);
-  }, [status, lastSubmittedPrompt, loading, runMock]);
+    setStatus("running");
+    setLoading(true);
+    setLastError("");
+    submitToApi(lastSubmittedPrompt);
+  }, [status, lastSubmittedPrompt, loading, submitToApi]);
 
   const isEmpty = !prompt.trim();
   const submitDisabled = isEmpty || loading;

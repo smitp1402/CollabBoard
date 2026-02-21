@@ -1,14 +1,21 @@
 import type { DocumentData, QuerySnapshot } from "firebase/firestore";
 import type { BoardObject } from "@/types/board-types";
+import { boardObjectFromDoc } from "@/lib/board/boardObjectFromDoc";
 
 /** Firestore path for a board's objects collection */
 export function objectsCollectionPath(boardId: string): string {
   return `boards/${boardId}/objects`;
 }
 
-function withRotation<T extends Record<string, unknown>>(obj: BoardObject, base: T): T & DocumentData {
+function withRotation<T extends Record<string, unknown>>(
+  obj: BoardObject,
+  base: T
+): T & DocumentData {
   if (obj.type === "connector") return base as T & DocumentData;
-  const rot = (obj as Extract<BoardObject, { type: "sticky" | "rectangle" | "text" | "frame" }>).rotation;
+  const rot = (obj as Extract<
+    BoardObject,
+    { type: "sticky" | "rectangle" | "text" | "frame" | "circle" | "line" }
+  >).rotation;
   return { ...base, ...(rot != null && !Number.isNaN(rot) && { rotation: rot }) } as T & DocumentData;
 }
 
@@ -53,6 +60,12 @@ export function toFirestoreObject(obj: BoardObject): DocumentData {
     return withRotation(obj, {
       ...base,
       ...(obj.title != null && { title: obj.title }),
+    });
+  }
+  if (obj.type === "circle" || obj.type === "line") {
+    return withRotation(obj, {
+      ...base,
+      ...(obj.color != null && { color: obj.color }),
     });
   }
   return base;
