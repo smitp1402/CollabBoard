@@ -1,3 +1,4 @@
+import type { Firestore } from "firebase/firestore";
 import {
   createBoardMeta,
   listBoards,
@@ -23,7 +24,7 @@ jest.mock("firebase/firestore", () => ({
 }));
 
 describe("boardMetadata", () => {
-  const db = {} as ReturnType<typeof import("@/lib/firebase/client").getDb>;
+  const db = {} as Firestore;
 
   beforeEach(() => {
     jest.clearAllMocks();

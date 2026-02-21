@@ -1,11 +1,18 @@
 "use client";
 
-import { useAuth } from "@/lib/auth/AuthContext";
-import { BoardListPage } from "@/components/boards/BoardListPage";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
 import { Sparkles } from "lucide-react";
 
 export default function Home() {
+  const router = useRouter();
   const { user, loading, signInWithGoogle } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (user) router.replace("/page/boards");
+  }, [user, loading, router]);
 
   if (loading) {
     return (
@@ -15,9 +22,7 @@ export default function Home() {
       </div>
     );
   }
-  if (user) {
-    return <BoardListPage />;
-  }
+  if (user) return null;
 
   return (
     <div className="landing_root">

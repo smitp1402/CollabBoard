@@ -37,4 +37,4 @@ match /boards/{boardId}/objects/{objectId} {
 }
 ```
 
-Replace `'default'` if your app uses a different `DEFAULT_BOARD_ID` (see [lib/board-constants.ts](../lib/board-constants.ts)).
+Replace `'default'` if your app uses a different `DEFAULT_BOARD_ID` (see [constants/board.ts](../constants/board.ts)).

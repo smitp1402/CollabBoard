@@ -5,7 +5,7 @@ All authenticated users open the same board at `/board` and collaborate. There i
 ## 6.1 Single board at `/board`
 
 - **Route:** [app/board/page.tsx](../app/board/page.tsx) renders `BoardPageContent` at `/board`.
-- **Board ID:** [app/board/BoardPageContent.tsx](../app/board/BoardPageContent.tsx) uses [DEFAULT_BOARD_ID](../lib/board-constants.ts) (`"default"`) for both `useBoardObjects` and `BoardCanvas`. There is no URL param or route segment for board id.
+- **Board ID:** Board page content uses [DEFAULT_BOARD_ID](../constants/board.ts) (`"default"`) for both `useBoardObjects` and `BoardCanvas`. There is no URL param or route segment for board id.
 - **Auth:** Only authenticated users can reach the board; unauthenticated users are redirected to `/`.
 - **Test:** [app/board/BoardPage.test.tsx](../app/board/BoardPage.test.tsx) — "uses single shared board (DEFAULT_BOARD_ID) when authenticated" asserts that `useBoardObjects` is called with `DEFAULT_BOARD_ID`.
 
