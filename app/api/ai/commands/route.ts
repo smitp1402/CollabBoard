@@ -50,6 +50,19 @@ function logCommand(params: {
 export async function POST(request: Request) {
   const startedAt = Date.now();
 
+  try {
+    return await handlePost(request, startedAt);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal server error.";
+    console.error("[POST /api/ai/commands] unhandled error:", message, error instanceof Error ? error.stack : "");
+    return NextResponse.json(
+      { error: { message, code: "INTERNAL_ERROR" } },
+      { status: 500 }
+    );
+  }
+}
+
+async function handlePost(request: Request, startedAt: number): Promise<NextResponse> {
   if (process.env.AI_AGENT_ENABLED === "false" || process.env.AI_AGENT_ENABLED === "0") {
     return NextResponse.json(
       {
