@@ -7,6 +7,7 @@ import { ref, remove } from "firebase/database";
 import { useAuth } from "@/context/AuthContext";
 import { AIPanel } from "@/components/ai/AIPanel";
 import { BoardCanvas } from "@/components/canvas/BoardCanvas";
+import { AI_PANEL_WIDTH } from "@/constants/layout";
 import { PerformancePanel } from "@/components/canvas/PerformancePanel";
 import { useBoardObjects } from "@/hooks/useBoardObjects";
 import { getRealtimeDb } from "@/lib/firebase/client";
@@ -30,6 +31,7 @@ export function BoardPageContent({ boardId }: BoardPageContentProps) {
   const [presenceError, setPresenceError] = useState<Error | null>(null);
   const [onlineOpen, setOnlineOpen] = useState(false);
   const [perfPanelOpen, setPerfPanelOpen] = useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = useState(true);
   const [fps, setFps] = useState<number | null>(null);
   const [cursorSyncLatencyMs, setCursorSyncLatencyMs] = useState<number | null>(null);
   const onlineRef = useRef<HTMLDivElement>(null);
@@ -176,10 +178,11 @@ export function BoardPageContent({ boardId }: BoardPageContentProps) {
                 onPresenceError={setPresenceError}
                 onFPSReport={setFps}
                 onCursorSyncLatency={setCursorSyncLatencyMs}
+                chatPanelOpen={chatPanelOpen}
               />
             </div>
           </div>
-          <AIPanel boardId={boardId} />
+          <AIPanel boardId={boardId} onOpenChange={setChatPanelOpen} />
           {perfPanelOpen && (
             <div className="perf-panel-wrap">
               <PerformancePanel

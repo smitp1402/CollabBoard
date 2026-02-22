@@ -44,7 +44,11 @@ export type CanvasControlPanelProps = {
   onZoomOut: () => void;
   canvasLocked: boolean;
   onLockToggle: () => void;
+  /** Extra offset from the right edge (e.g. when chat panel is open). */
+  rightOffset?: number;
 };
+
+const CONTROL_PANEL_MARGIN_RIGHT = 16;
 
 export function CanvasControlPanel({
   scale,
@@ -52,6 +56,7 @@ export function CanvasControlPanel({
   onZoomOut,
   canvasLocked,
   onLockToggle,
+  rightOffset = 0,
 }: CanvasControlPanelProps) {
   return (
     <div
@@ -59,7 +64,7 @@ export function CanvasControlPanel({
       style={{
         position: "absolute",
         left: "auto",
-        right: 16,
+        right: CONTROL_PANEL_MARGIN_RIGHT + rightOffset,
         bottom: 16,
         display: "flex",
         flexDirection: "row",
@@ -71,6 +76,7 @@ export function CanvasControlPanel({
         borderRadius: "var(--radius-sm)",
         boxShadow: "var(--shadow-sm)",
         zIndex: 10,
+        transition: "right 0.3s ease-out",
       }}
     >
       <button

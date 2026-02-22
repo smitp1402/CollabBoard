@@ -4,6 +4,25 @@ const TOOL_ICON_SIZE = 22;
 
 export type BoardTool = "selection" | "sticky" | "rectangle" | "text" | "frame" | "connector" | null;
 
+/** Modern tools icon: 2x2 grid of rounded squares (toolbox / tool set). */
+function IconTools() {
+  return (
+    <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+/** Chevron to collapse toolbar (point left). */
+function IconChevronCollapse() {
+  return (
+    <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M15 18l-6-6 6-6" />
+    </svg>
+  );
+}
 function IconSelection() {
   return (
     <svg width={TOOL_ICON_SIZE} height={TOOL_ICON_SIZE} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -58,13 +77,35 @@ export type BoardToolbarProps = {
   activeTool: BoardTool;
   setActiveTool: (updater: (t: BoardTool) => BoardTool) => void;
   onConnectorToolChange?: () => void;
+  /** When false, show only expand icon; when true, show full toolbar. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
 };
 
 export function BoardToolbar({
   activeTool,
   setActiveTool,
   onConnectorToolChange,
+  expanded = true,
+  onToggleExpand,
 }: BoardToolbarProps) {
+  if (!expanded) {
+    return (
+      <div className="board-toolbar board-toolbar--collapsed">
+        <button
+          type="button"
+          className="board-toolbar__btn board-toolbar__expand-btn"
+          onClick={onToggleExpand}
+          data-testid="toolbar-expand"
+          title="Expand toolbar"
+          aria-label="Expand toolbar"
+        >
+          <IconTools />
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="board-toolbar">
       <button
@@ -130,6 +171,18 @@ export function BoardToolbar({
       >
         <IconConnector />
       </button>
+      {onToggleExpand && (
+        <button
+          type="button"
+          className="board-toolbar__btn board-toolbar__collapse-btn"
+          onClick={onToggleExpand}
+          data-testid="toolbar-collapse"
+          title="Collapse toolbar"
+          aria-label="Collapse toolbar"
+        >
+          <IconChevronCollapse />
+        </button>
+      )}
     </div>
   );
 }

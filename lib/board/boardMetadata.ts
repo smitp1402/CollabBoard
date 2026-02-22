@@ -4,6 +4,9 @@ import {
   getDocs,
   getDoc,
   setDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
   Timestamp,
   type Firestore,
   type QuerySnapshot,
@@ -16,6 +19,8 @@ export type BoardMeta = {
   name: string;
   createdBy: string;
   createdAt: Timestamp;
+  /** User IDs who starred this board. */
+  starredBy?: string[];
 };
 
 const DEFAULT_BOARD_NAME = "Default board";
@@ -41,6 +46,7 @@ export function snapshotToBoardMetaList(snapshot: QuerySnapshot<DocumentData>): 
   snapshot.forEach((d) => {
     const data = d.data();
     const createdAt = data.createdAt;
+    const starredBy = data.starredBy;
     list.push({
       id: d.id,
       name: typeof data.name === "string" ? data.name : "",
@@ -48,6 +54,7 @@ export function snapshotToBoardMetaList(snapshot: QuerySnapshot<DocumentData>): 
       createdAt: createdAt && typeof (createdAt as { toMillis?: () => number }).toMillis === "function"
         ? (createdAt as unknown as Timestamp)
         : Timestamp.now(),
+      starredBy: Array.isArray(starredBy) ? (starredBy as string[]) : undefined,
     });
   });
   return list;
@@ -69,4 +76,19 @@ export async function ensureDefaultBoard(db: Firestore): Promise<void> {
     createdBy: "",
     createdAt: Timestamp.now(),
   });
+}
+
+/** Toggle star for a board for the given user. Updates Firestore. */
+export async function updateBoardStar(
+  db: Firestore,
+  boardId: string,
+  userId: string,
+  starred: boolean
+): Promise<void> {
+  const ref = doc(db, "boards", boardId);
+  if (starred) {
+    await updateDoc(ref, { starredBy: arrayUnion(userId) });
+  } else {
+    await updateDoc(ref, { starredBy: arrayRemove(userId) });
+  }
 }

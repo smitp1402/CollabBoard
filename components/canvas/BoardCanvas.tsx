@@ -34,6 +34,7 @@ import {
   TAP_PLACE_DEDUPE_MS,
 } from "@/lib/board/canvasConstants";
 import { computeViewport, computeGridLines } from "@/lib/board/viewportUtils";
+import { AI_PANEL_WIDTH } from "@/constants/layout";
 
 const FPS_REPORT_INTERVAL_MS = 500;
 const FPS_SAMPLES = 10;
@@ -47,9 +48,11 @@ type BoardCanvasProps = {
   onPresenceError?: (err: Error | null) => void;
   onFPSReport?: (fps: number) => void;
   onCursorSyncLatency?: (ms: number | null) => void;
+  /** When true, the AI chat panel is open; control panel (zoom) shifts left so it stays visible. */
+  chatPanelOpen?: boolean;
 };
 
-export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsChange, onOtherUsersChange, onPresenceError, onFPSReport, onCursorSyncLatency }: BoardCanvasProps) {
+export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsChange, onOtherUsersChange, onPresenceError, onFPSReport, onCursorSyncLatency, chatPanelOpen }: BoardCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [localObjects, setLocalObjects] = useState<BoardObject[]>([]);
   const objects = propsObjects ?? localObjects;
@@ -69,6 +72,11 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
   const [isPanning, setIsPanning] = useState(false);
   const [canvasLocked, setCanvasLocked] = useState(false);
   const [showColorFromContextMenu, setShowColorFromContextMenu] = useState(false);
+  const [toolbarPosition, setToolbarPosition] = useState({ x: 8, y: 80 });
+  const [toolbarExpanded, setToolbarExpanded] = useState(true);
+  const [isDraggingToolbar, setIsDraggingToolbar] = useState(false);
+  const toolbarFloatRef = useRef<HTMLDivElement>(null);
+  const toolbarDragStartRef = useRef<{ x: number; y: number; clientX: number; clientY: number } | null>(null);
   const panStartRef = useRef({ x: 0, y: 0 });
   const didPanRef = useRef(false);
   const lastPinchRef = useRef<{ distance: number; centerX: number; centerY: number } | null>(null);
@@ -146,6 +154,44 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
       window.removeEventListener("mouseup", onMouseUp);
     };
   }, [marqueeRect, objects]);
+
+  useEffect(() => {
+    if (!isDraggingToolbar) return;
+    const onMouseMove = (e: MouseEvent) => {
+      const start = toolbarDragStartRef.current;
+      if (!start || !containerRef.current || !toolbarFloatRef.current) return;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const floatRect = toolbarFloatRef.current.getBoundingClientRect();
+      const deltaX = e.clientX - start.clientX;
+      const deltaY = e.clientY - start.clientY;
+      let x = start.x + deltaX;
+      let y = start.y + deltaY;
+      x = Math.max(0, Math.min(x, containerRect.width - floatRect.width));
+      y = Math.max(0, Math.min(y, containerRect.height - floatRect.height));
+      setToolbarPosition({ x, y });
+    };
+    const onMouseUp = () => {
+      setIsDraggingToolbar(false);
+      toolbarDragStartRef.current = null;
+    };
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, [isDraggingToolbar]);
+
+  const handleToolbarDragStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    toolbarDragStartRef.current = {
+      x: toolbarPosition.x,
+      y: toolbarPosition.y,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    };
+    setIsDraggingToolbar(true);
+  }, [toolbarPosition.x, toolbarPosition.y]);
 
   const { otherUsers, error: presenceError, lastCursorSyncLatencyMs } = usePresence(boardId ?? "", user ?? null, cursorWorld);
 
@@ -646,13 +692,31 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
         position: "relative",
       }}
     >
-      <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "row" }}>
-      <BoardToolbar
-        activeTool={activeTool}
-        setActiveTool={setActiveTool}
-        onConnectorToolChange={() => setConnectorFromId(null)}
-      />
-      <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative" }} ref={containerRef}>
+      <div style={{ flex: 1, minHeight: 0, minWidth: 0, position: "relative" }}>
+        <div
+          ref={toolbarFloatRef}
+          className="board-toolbar-float board-toolbar-float_movable"
+          style={{
+            left: toolbarPosition.x,
+            top: toolbarPosition.y,
+            bottom: "auto",
+          }}
+        >
+          <BoardToolbar
+            activeTool={activeTool}
+            setActiveTool={setActiveTool}
+            onConnectorToolChange={() => setConnectorFromId(null)}
+            expanded={toolbarExpanded}
+            onToggleExpand={() => setToolbarExpanded((e) => !e)}
+          />
+          <div
+            className="board-toolbar-drag-handle"
+            onMouseDown={handleToolbarDragStart}
+            aria-label="Drag to move toolbar"
+            title="Drag to move toolbar"
+          />
+        </div>
+        <div style={{ position: "absolute", inset: 0 }} ref={containerRef}>
         <Stage
           width={size.width}
           height={size.height}
@@ -945,8 +1009,9 @@ export function BoardCanvas({ boardId, user, objects: propsObjects, onObjectsCha
         onZoomOut={handleZoomOut}
         canvasLocked={canvasLocked}
         onLockToggle={() => setCanvasLocked((prev) => !prev)}
+        rightOffset={chatPanelOpen ? AI_PANEL_WIDTH : 0}
       />
-      </div>
+        </div>
       </div>
     </div>
   );

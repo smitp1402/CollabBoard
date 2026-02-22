@@ -3,12 +3,15 @@ import {
   createBoardMeta,
   listBoards,
   ensureDefaultBoard,
+  updateBoardStar,
+  snapshotToBoardMetaList,
   type BoardMeta,
 } from "./boardMetadata";
 
 const mockSetDoc = jest.fn();
 const mockGetDocs = jest.fn();
 const mockGetDoc = jest.fn();
+const mockUpdateDoc = jest.fn();
 const mockDoc = jest.fn((...args: unknown[]) => ({ path: args.join("/") }));
 const mockCollection = jest.fn((...args: unknown[]) => ({ path: args.join("/") }));
 const mockTimestamp = { now: jest.fn(() => ({ seconds: 123, nanoseconds: 0 }) as ReturnType<ReturnType<typeof jest.fn>>) };
@@ -19,6 +22,9 @@ jest.mock("firebase/firestore", () => ({
   getDocs: (...args: unknown[]) => mockGetDocs(...args),
   getDoc: (...args: unknown[]) => mockGetDoc(...args),
   setDoc: (...args: unknown[]) => mockSetDoc(...args),
+  updateDoc: (...args: unknown[]) => mockUpdateDoc(...args),
+  arrayUnion: (x: unknown) => ({ _arrayUnion: x }),
+  arrayRemove: (x: unknown) => ({ _arrayRemove: x }),
   serverTimestamp: () => mockTimestamp.now(),
   Timestamp: { now: () => mockTimestamp.now() },
 }));
@@ -92,6 +98,70 @@ describe("boardMetadata", () => {
       await ensureDefaultBoard(db);
 
       expect(mockSetDoc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("snapshotToBoardMetaList", () => {
+    it("includes starredBy when present in doc", () => {
+      const createdAt = { toMillis: () => 100000 };
+      const snapshot = {
+        forEach: (fn: (doc: { id: string; data: () => Record<string, unknown> }) => void) => {
+          fn({
+            id: "b1",
+            data: () => ({
+              name: "Board 1",
+              createdBy: "u1",
+              createdAt,
+              starredBy: ["u1", "u2"],
+            }),
+          });
+        },
+      };
+      const list = snapshotToBoardMetaList(snapshot as never);
+      expect(list).toHaveLength(1);
+      expect(list[0].starredBy).toEqual(["u1", "u2"]);
+    });
+
+    it("omits starredBy when not an array", () => {
+      const createdAt = { toMillis: () => 100000 };
+      const snapshot = {
+        forEach: (fn: (doc: { id: string; data: () => Record<string, unknown> }) => void) => {
+          fn({
+            id: "b1",
+            data: () => ({
+              name: "Board 1",
+              createdBy: "u1",
+              createdAt,
+              starredBy: "invalid",
+            }),
+          });
+        },
+      };
+      const list = snapshotToBoardMetaList(snapshot as never);
+      expect(list[0].starredBy).toBeUndefined();
+    });
+  });
+
+  describe("updateBoardStar", () => {
+    it("calls updateDoc with arrayUnion when starring", async () => {
+      mockUpdateDoc.mockResolvedValue(undefined);
+
+      await updateBoardStar(db, "board-1", "user-1", true);
+
+      expect(mockUpdateDoc).toHaveBeenCalledTimes(1);
+      const [ref, data] = mockUpdateDoc.mock.calls[0];
+      expect(ref).toBeDefined();
+      expect(data).toMatchObject({ starredBy: { _arrayUnion: "user-1" } });
+    });
+
+    it("calls updateDoc with arrayRemove when unstarring", async () => {
+      mockUpdateDoc.mockResolvedValue(undefined);
+
+      await updateBoardStar(db, "board-1", "user-1", false);
+
+      expect(mockUpdateDoc).toHaveBeenCalledTimes(1);
+      const [ref, data] = mockUpdateDoc.mock.calls[0];
+      expect(data).toMatchObject({ starredBy: { _arrayRemove: "user-1" } });
     });
   });
 });

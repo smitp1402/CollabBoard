@@ -48,9 +48,11 @@ export type HistoryEntry = {
 export type AIPanelProps = {
   boardId: string;
   className?: string;
+  /** Notifies parent when the panel is opened or collapsed so layout (e.g. zoom controls) can adjust. */
+  onOpenChange?: (open: boolean) => void;
 };
 
-export function AIPanel({ boardId, className }: AIPanelProps) {
+export function AIPanel({ boardId, className, onOpenChange }: AIPanelProps) {
   const { user } = useAuth();
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,6 +63,10 @@ export function AIPanel({ boardId, className }: AIPanelProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [activeCommandId, setActiveCommandId] = useState<string | null>(null);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  useEffect(() => {
+    onOpenChange?.(!isCollapsed);
+  }, [isCollapsed, onOpenChange]);
 
   const mapApiStatusToUi = useCallback((apiStatus?: string): AICommandStatus => {
     if (apiStatus === "pending") return "running";

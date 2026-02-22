@@ -70,6 +70,52 @@ Without these, the app will show “Firestore not configured” or similar error
 
 ---
 
+## Step 4b: Set secrets (required for AI commands)
+
+The `/api/ai/commands` route needs **server-only secrets**. These are not stored in `apphosting.yaml`; you set them once in Firebase.
+
+### 1. Get your Firebase service account key
+
+1. In [Firebase Console](https://console.firebase.google.com) → your project → **Project settings** (gear) → **Service accounts**.
+2. Click **Generate new private key** and download the JSON file.
+3. Open the JSON. You will use:
+   - **`client_email`** → for the secret `FIREBASE_CLIENT_EMAIL`
+   - **`private_key`** → for the secret `FIREBASE_PRIVATE_KEY` (keep the full value including `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----`; newlines can be real or escaped `\n`)
+
+### 2. Set secrets via Firebase CLI
+
+In a terminal (from your project root or any folder):
+
+```bash
+# Install Firebase CLI if needed: npm i -g firebase
+firebase login
+firebase use colabboard-57f6f   # or your project ID
+
+# Set each secret; you'll be prompted to paste the value.
+firebase apphosting:secrets:set FIREBASE_CLIENT_EMAIL
+# Paste the client_email value from the JSON (e.g. firebase-adminsdk-xxxxx@colabboard-57f6f.iam.gserviceaccount.com)
+
+firebase apphosting:secrets:set FIREBASE_PRIVATE_KEY
+# Paste the full private_key from the JSON (including BEGIN/END lines; newlines are OK)
+
+firebase apphosting:secrets:set OPENAI_API_KEY
+# Paste your OpenAI API key (from platform.openai.com)
+```
+
+If **App Hosting** uses a different backend name, add `--backend <name>`. List backends with `firebase apphosting:backends:list`.
+
+### 3. Redeploy
+
+After setting or changing secrets, trigger a new deployment (Firebase Console → App Hosting → **Redeploy**, or push a new commit to the connected branch).
+
+### 4. Verify
+
+1. Open your App Hosting URL, sign in, open a board.
+2. Open the AI panel and send a simple command (e.g. "add a sticky saying hello").
+3. If it still fails with 500: check the error message in the AI panel, and in [Google Cloud Console](https://console.cloud.google.com) → **Logging** filter by your service and search for `[POST /api/ai/commands]` to see the full server error.
+
+---
+
 ## Step 5: Deploy
 
 1. Start or trigger the first deployment (e.g. **Deploy** or **Save and deploy**).
@@ -113,6 +159,9 @@ Without this, Google (and other) sign-in will be blocked in production.
 - **Cursors/presence not showing**  
   Confirm Realtime Database is created, rules allow read/write for the paths in use, and `NEXT_PUBLIC_FIREBASE_DATABASE_URL` is set in App Hosting. See `docs/Realtime-Database-Rules.md`.
 
+- **AI commands return 500 or "getting metadata from plugin failed" / "routing unsupported"**  
+  The `/api/ai/commands` route needs the three **secrets** (not plain env vars): `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `OPENAI_API_KEY`. Set them with `firebase apphosting:secrets:set <NAME>` (see **Step 4b** above). Use the full `private_key` from your service account JSON (with BEGIN/END lines; newlines OK). Then redeploy.
+
 ---
 
 ## Summary
@@ -122,7 +171,8 @@ Without this, Google (and other) sign-in will be blocked in production.
 | 1 | Open Firebase Console → Build → App Hosting |
 | 2 | Connect GitHub repo and branch |
 | 3 | Confirm Next.js build (e.g. `npm run build`) |
-| 4 | Add all 7 `NEXT_PUBLIC_FIREBASE_*` env vars |
+| 4 | Add all 7 `NEXT_PUBLIC_FIREBASE_*` env vars in `apphosting.yaml` |
+| 4b | Set secrets: `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`, `OPENAI_API_KEY` (for AI commands) |
 | 5 | Deploy and copy the live URL |
 | 6 | Add that URL’s domain to Auth → Authorized domains |
 | 7 | Test login and board at the live URL |
